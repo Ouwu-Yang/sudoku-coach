@@ -1078,12 +1078,11 @@ function parseOcrBoxes(data,tile){
   const items=[];
   // Tesseract.js v5 may expose tsv; parse it because it is stable across rendering modes.
   if(data.tsv){
-    const lines=data.tsv.trim().split(/
-/).slice(1);
+    const lines=data.tsv.trim().split(/\n/).slice(1);
     for(const line of lines){
-      const p=line.split('	');
+      const p=line.split('\t');
       if(p.length<12) continue;
-      const level=+p[0], left=+p[6], top=+p[7], width=+p[8], height=+p[9], cf=+p[10], text=(p.slice(11).join('	')||'').replace(/[^1-9]/g,'');
+      const level=+p[0], left=+p[6], top=+p[7], width=+p[8], height=+p[9], cf=+p[10], text=(p.slice(11).join('\t')||'').replace(/[^1-9]/g,'');
       if(text && cf>=0 && level>=5) items.push({text:text[0],left,top,width,height,conf:cf});
     }
   }
