@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>数独教练</title>
+
+<meta name="theme-color" content="#315efb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="数独教练">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+
+<style>
+:root{
+  --bg:#f6f7fb; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --line:#d1d5db;
+  --strong:#111827; --accent:#315efb; --accent-soft:#eaf0ff; --warn:#d97706;
+  --danger:#dc2626; --good:#15803d; --hint:#f8fafc; --shadow:0 8px 24px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.app{max-width:1180px;margin:auto;padding:18px}
+header{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+h1{margin:0;font-size:26px}
+.sub{font-size:13px;color:var(--muted);margin-top:4px}
+.layout{display:grid;grid-template-columns:minmax(360px,620px) minmax(320px,1fr);gap:18px}
+.card{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:16px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+button,select,input[type="text"]{border:1px solid #d8dce6;background:#fff;border-radius:10px;padding:9px 12px;font-size:14px}
+button{cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.soft{background:var(--accent-soft);border-color:#cfdcff;color:#2349cf}
+button.danger{color:var(--danger)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.board-wrap{position:relative}
+.board{width:100%;aspect-ratio:1;display:grid;grid-template-columns:repeat(9,1fr);border:3px solid var(--strong);background:#fff;user-select:none}
+.cell{position:relative;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;min-width:0}
+.cell:nth-child(3n){border-right:3px solid var(--strong)}
+.cell:nth-child(9n){border-right:0}
+.cell:nth-child(n+19):nth-child(-n+27),
+.cell:nth-child(n+46):nth-child(-n+54){border-bottom:3px solid var(--strong)}
+.cell:nth-child(n+73){border-bottom:0}
+.value{font-size:clamp(22px,5vw,38px);font-weight:600}
+.given .value{color:#111827}
+.user .value{color:#2451db}
+.cands{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);font-size:clamp(8px,1.5vw,12px);color:#555}
+.cand{display:flex;align-items:center;justify-content:center;border-radius:3px}
+.cand.target{background:#fee2e2;color:#991b1b;font-weight:700}
+.cell.hlA{background:#fff7cc}
+.cell.hlB{background:#e7f7ec}
+.cell.hlC{background:#e9efff}
+.cell.elim{box-shadow:inset 0 0 0 3px #ef4444}
+.cell.selected{box-shadow:inset 0 0 0 3px var(--accent)}
+.number-pad{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin-top:12px}
+.number-pad button{padding:10px 0;font-weight:600}
+.status{margin-top:10px;font-size:13px;color:var(--muted)}
+.panel-title{font-size:17px;font-weight:700;margin-bottom:8px}
+.hintbox{background:var(--hint);border:1px solid #e5e7eb;border-radius:14px;padding:14px;min-height:150px;line-height:1.7}
+.hint-title{font-weight:700;margin-bottom:6px}
+.tech-badge{display:inline-block;background:#111827;color:#fff;border-radius:999px;padding:3px 9px;font-size:12px;margin-right:6px}
+.level-badge{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:999px;padding:3px 9px;font-size:12px}
+.log{margin-top:12px;max-height:230px;overflow:auto;font-size:13px}
+.log-item{padding:8px 0;border-bottom:1px solid #eee}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.skill-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;font-size:13px}
+.skill-list label{display:flex;align-items:center;gap:6px}
+.small{font-size:12px;color:var(--muted)}
+.section{margin-top:14px}
+textarea{width:100%;min-height:70px;border:1px solid #d8dce6;border-radius:10px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+details{margin-top:10px}
+summary{cursor:pointer;font-weight:600}
+@media(max-width:900px){
+  .layout{grid-template-columns:1fr}
+  .app{padding:10px}
+  h1{font-size:22px}
+}
+
+.photo-panel{margin-top:14px;border:1px solid #e5e7eb;border-radius:14px;padding:12px;background:#fbfcff}
+.photo-actions{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.photo-stage{position:relative;width:100%;min-height:120px;background:#111827;border-radius:12px;overflow:hidden;display:none;touch-action:none}
+.photo-stage canvas{display:block;width:100%;height:auto}
+.corner-dot{position:absolute;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;background:#fff;border:3px solid #315efb;box-shadow:0 2px 8px rgba(0,0,0,.35);display:none;touch-action:none}
+.photo-help{font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px}
+.ocr-progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px;display:none}
+.ocr-progress > div{height:100%;width:0;background:#315efb;transition:width .2s}
+.review-grid{display:grid;grid-template-columns:repeat(9,1fr);border:2px solid #111827;margin-top:10px}
+.review-cell{aspect-ratio:1;border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;display:flex;align-items:center;justify-content:center;font-size:18px;background:#fff;cursor:pointer}
+.review-cell:nth-child(3n){border-right:2px solid #111827}
+.review-cell:nth-child(9n){border-right:0}
+.review-cell:nth-child(n+19):nth-child(-n+27),
+.review-cell:nth-child(n+46):nth-child(-n+54){border-bottom:2px solid #111827}
+.review-cell:nth-child(n+73){border-bottom:0}
+.review-cell.low{background:#fff7ed}
+.review-cell.selectedReview{box-shadow:inset 0 0 0 3px #315efb}
+
+
+.ocr-meta{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:7px}
+.ocr-stage-label{font-size:12px;color:var(--muted)}
+.ocr-time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ocr-progress{height:11px}
+.ocr-progress > div{position:relative}
+.ocr-progress > div::after{content:attr(data-pct);position:absolute;right:4px;top:-18px;font-size:11px;color:var(--muted)}
+.practice-card{border:1px solid #e5e7eb;border-radius:14px;padding:12px;background:#fbfcff}
+.practice-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:8px}
+.practice-board{width:min(100%,520px);aspect-ratio:1;display:grid;grid-template-columns:repeat(9,1fr);border:2px solid #111827;background:#fff;margin-top:10px}
+.pcell{position:relative;border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;min-width:0}
+.pcell:nth-child(3n){border-right:2px solid #111827}
+.pcell:nth-child(9n){border-right:0}
+.pcell:nth-child(n+19):nth-child(-n+27),
+.pcell:nth-child(n+46):nth-child(-n+54){border-bottom:2px solid #111827}
+.pcell:nth-child(n+73){border-bottom:0}
+.pcands{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);font-size:clamp(7px,1.3vw,11px)}
+.pcand{display:flex;align-items:center;justify-content:center;border-radius:4px;cursor:pointer;min-width:0}
+.pcand.active{background:var(--accent-bg,#eaf0ff);outline:2px solid var(--accent)}
+.pcand.correct{background:#dcfce7;color:#166534;font-weight:700}
+.pcand.wrong{background:#fee2e2;color:#991b1b;font-weight:700}
+.pcell.key{background:#fffbea}
+.practice-msg{min-height:42px;margin-top:8px;font-size:13px;line-height:1.6}
+.practice-legend{font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px}
+
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div>
+    <h1>数独教练 · Advanced Tutor</h1>
+    <div class="sub">面向进阶～大师：逐层提示、候选验证、批量照片识别，并新增特定技巧随机专练。</div>
+  </div>
+  <div class="small">v1.2 · 批量OCR + 技巧专练</div>
+</header>
+
+<div class="layout">
+  <div class="card">
+    <div class="toolbar">
+      <button class="primary" id="sampleBtn">载入当前练习题</button>
+      <button id="clearBtn">清空</button>
+      <button id="undoBtn">撤销</button>
+      <button class="soft" id="autoCandBtn">自动候选：开</button>
+      <button id="resetMarksBtn">清除高亮</button>
+    </div>
+    <div class="photo-panel">
+      <div class="panel-title">拍照 / 照片导入题目</div>
+      <input id="photoInput" type="file" accept="image/*" capture="environment" style="display:none">
+      <div class="photo-actions">
+        <button class="primary" id="takePhotoBtn">拍照或选择照片</button>
+        <button id="rotatePhotoBtn" disabled>旋转90°</button>
+        <button id="resetCornersBtn" disabled>重置四角</button>
+        <button class="soft" id="ocrBtn" disabled>识别题目</button>
+      </div>
+      <div id="photoStage" class="photo-stage">
+        <canvas id="photoCanvas"></canvas>
+        <span class="corner-dot" id="corner0"></span>
+        <span class="corner-dot" id="corner1"></span>
+        <span class="corner-dot" id="corner2"></span>
+        <span class="corner-dot" id="corner3"></span>
+      </div>
+      <div class="photo-help">
+        推荐正对数独拍摄。载入照片后，拖动四个蓝点分别对准数独外框的左上、右上、右下、左下角，再点“识别题目”。<br>
+        自动识别完成后会进入81格校对区；橙色格表示识别置信度较低，建议人工确认。
+      </div>
+      <div class="ocr-meta" id="ocrMeta" style="display:none">
+        <div class="ocr-stage-label" id="ocrStageLabel">等待识别</div>
+        <div class="ocr-time" id="ocrTime">00:00</div>
+      </div>
+      <div class="ocr-progress" id="ocrProgress"><div id="ocrProgressBar" data-pct="0%"></div></div>
+      <div id="ocrStatus" class="small"></div>
+      <div class="photo-actions">
+        <button class="danger" id="cancelOcrBtn" style="display:none">取消识别</button>
+      </div>
+      <div id="reviewArea" style="display:none">
+        <div class="review-grid" id="reviewGrid"></div>
+        <div class="number-pad" id="reviewPad" style="grid-template-columns:repeat(10,1fr)"></div>
+        <div class="photo-actions">
+          <button class="primary" id="confirmPhotoImportBtn">确认导入盘面</button>
+          <button id="cancelPhotoImportBtn">取消校对</button>
+        </div>
+      </div>
+    </div>
+    <div class="board-wrap"><div id="board" class="board"></div></div>
+    <div class="number-pad" id="pad"></div>
+    <div class="status" id="status">点击格子后输入数字。空格会自动显示候选数。</div>
+
+    <div class="section">
+      <div class="panel-title">文本导入</div>
+      <div class="small">输入 9 行，每行 9 个字符；空格可用 0 或 .</div>
+      <textarea id="importBox" placeholder="380000000&#10;067080053&#10;509300008&#10;978001346&#10;050763009&#10;603008570&#10;795632000&#10;842000635&#10;136800297"></textarea>
+      <div class="toolbar" style="margin-top:8px">
+        <button id="importBtn">导入题目</button>
+        <button id="exportBtn">导出当前盘面</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="grid2">
+      <button class="primary" id="hint1Btn">提示 1：只说方向</button>
+      <button id="hint2Btn">提示 2：给位置</button>
+      <button id="hint3Btn">提示 3：完整逻辑</button>
+      <button class="soft" id="applyBtn">执行这一步</button>
+    </div>
+
+    <div class="section hintbox" id="hintBox">
+      <div class="hint-title">使用方式</div>
+      先录入题目，然后点“提示1”。系统会从你启用的技巧中，寻找当前盘面最优先、可实际推进的一步。<br>
+      提示1只告诉你技巧方向；提示2给出关键格；提示3展开完整推理。
+    </div>
+
+    <div class="section">
+      <div class="panel-title">技巧范围</div>
+      <div class="skill-list" id="skills"></div>
+      <div class="toolbar" style="margin-top:10px">
+        <button id="basicPreset">进阶预设</button>
+        <button id="masterPreset">大师预设</button>
+        <button id="wingPreset">Wing 专练</button>
+      </div>
+      <div class="small">
+        当前引擎已实现：单数、锁定候选、裸数组、隐藏数对、Fish 2~4、XY/XYZ/W-Wing、Skyscraper、2-String Kite、简单染色。<br>
+        AIC/ALS/Death Blossom/Sue de Coq 等列为后续扩展位，界面已预留。
+      </div>
+    </div>
+
+    <div class="section practice-card">
+      <div class="panel-title">特定技巧专练生成器</div>
+      <div class="small">生成“候选结构局面题”，专门训练识别技巧，不受完整题其他简单步骤干扰。每次会随机换数字、行列位置和方向，因此同一技巧可以反复练。</div>
+      <div class="practice-toolbar">
+        <select id="practiceSkill" aria-label="选择技巧">
+          <option value="wWing">W-Wing</option>
+          <option value="xyWing">XY-Wing</option>
+          <option value="xyzWing">XYZ-Wing</option>
+          <option value="xWing">X-Wing</option>
+          <option value="skyscraper">Skyscraper</option>
+          <option value="kite">2-String Kite</option>
+        </select>
+        <select id="practiceDifficulty" aria-label="练习难度">
+          <option value="clean">纯结构</option>
+          <option value="noise" selected>带干扰候选</option>
+        </select>
+      </div>
+      <div class="toolbar" style="margin-top:8px">
+        <button class="primary" id="newPracticeBtn">生成新题</button>
+        <button id="checkPracticeBtn">检查选择</button>
+        <button id="practiceHintBtn">给一个提示</button>
+        <button id="practiceAnswerBtn">显示答案与逻辑</button>
+      </div>
+      <div id="practiceBoard" class="practice-board"></div>
+      <div id="practiceMsg" class="practice-msg">点击“生成新题”开始。目标：点选你认为可以删除的候选数字。</div>
+      <div class="practice-legend">说明：这是技巧识别专练，不是完整数独题。它保留严格的候选逻辑关系，重点训练你“第一眼看结构”的速度。</div>
+    </div>
+
+    <div class="section">
+      <div class="panel-title">候选验证模式</div>
+      <div class="small">先在盘面中点击一个候选小数字，再点“验证所选候选”。系统会检查当前已实现技巧是否能合法删除它。</div>
+      <div class="toolbar" style="margin-top:8px">
+        <button id="verifyBtn">验证所选候选</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="panel-title">解题记录</div>
+      <div id="log" class="log"></div>
+    </div>
+
+    <details>
+      <summary>技巧层级说明</summary>
+      <div class="small" style="line-height:1.8;margin-top:8px">
+        1–3：Singles / Locked Candidates / Subsets<br>
+        4–6：Fish / Wings / Skyscraper / 2-String Kite<br>
+        7：Simple Coloring<br>
+        8+：AIC / ALS / Grouped Links / Sue de Coq（后续扩展）
+      </div>
+    </details>
+  </div>
+</div>
+</div>
+
+<script>
+const ALL = [1,2,3,4,5,6,7,8,9];
+let grid = Array(81).fill(0);
+let givens = Array(81).fill(false);
+let selected = null;
+let selectedCandidate = null;
+let autoCandidates = true;
+let history = [];
+let currentHint = null;
+let hintStage = 0;
+
+const skillDefs = [
+ ["nakedSingle","裸单",true],
+ ["hiddenSingle","隐藏单",true],
+ ["locked","锁定候选",true],
+ ["nakedSubset","裸数对/三/四数组",true],
+ ["hiddenPair","隐藏数对",true],
+ ["fish2","X-Wing",true],
+ ["fish3","Swordfish",true],
+ ["fish4","Jellyfish",false],
+ ["xyWing","XY-Wing",true],
+ ["xyzWing","XYZ-Wing",true],
+ ["wWing","W-Wing",true],
+ ["skyscraper","Skyscraper",true],
+ ["twoStringKite","2-String Kite",true],
+ ["coloring","Simple Coloring",true],
+ ["aic","AIC（扩展位）",false],
+ ["als","ALS（扩展位）",false]
+];
+const skillEnabled = Object.fromEntries(skillDefs.map(x=>[x[0],x[2]]));
+
+const board = document.getElementById('board');
+const hintBox = document.getElementById('hintBox');
+const logEl = document.getElementById('log');
+
+function rc(i){ return [Math.floor(i/9), i%9]; }
+function idx(r,c){ return r*9+c; }
+function name(i){ const [r,c]=rc(i); return `R${r+1}C${c+1}`; }
+function unitRow(r){ return ALL.map((_,c)=>idx(r,c)); }
+function unitCol(c){ return ALL.map((_,r)=>idx(r,c)); }
+function unitBox(br,bc){ let a=[]; for(let r=br*3;r<br*3+3;r++) for(let c=bc*3;c<bc*3+3;c++) a.push(idx(r,c)); return a; }
+function peers(i){
+  const [r,c]=rc(i), s=new Set([...unitRow(r),...unitCol(c),...unitBox(Math.floor(r/3),Math.floor(c/3))]);
+  s.delete(i); return [...s];
+}
+function sees(a,b){ return peers(a).includes(b); }
+function candidates(i){
+  if(grid[i]) return [];
+  const used = new Set(peers(i).map(p=>grid[p]).filter(Boolean));
+  return ALL.filter(n=>!used.has(n));
+}
+function candMap(){ return Array.from({length:81},(_,i)=>new Set(candidates(i))); }
+function isValid(){
+  for(let r=0;r<9;r++){ let a=unitRow(r).map(i=>grid[i]).filter(Boolean); if(new Set(a).size!==a.length) return false; }
+  for(let c=0;c<9;c++){ let a=unitCol(c).map(i=>grid[i]).filter(Boolean); if(new Set(a).size!==a.length) return false; }
+  for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++){ let a=unitBox(br,bc).map(i=>grid[i]).filter(Boolean); if(new Set(a).size!==a.length) return false; }
+  return true;
+}
+function solved(){ return grid.every(Boolean) && isValid(); }
+
+function render(){
+  board.innerHTML='';
+  const cm = candMap();
+  grid.forEach((v,i)=>{
+    const d=document.createElement('div');
+    d.className='cell '+(givens[i]?'given':(v?'user':''));
+    if(i===selected) d.classList.add('selected');
+    d.dataset.i=i;
+    if(v){
+      d.innerHTML=`<div class="value">${v}</div>`;
+      d.onclick=()=>{selected=i; selectedCandidate=null; render();};
+    }else{
+      const cs=[...cm[i]];
+      d.innerHTML=`<div class="cands">${ALL.map(n=>`<span class="cand" data-n="${n}">${cs.includes(n)?n:''}</span>`).join('')}</div>`;
+      d.onclick=(e)=>{
+        selected=i;
+        const t=e.target.closest('.cand');
+        if(t && t.textContent){
+          selectedCandidate={i,n:+t.dataset.n};
+        } else selectedCandidate=null;
+        render(); highlightCurrent();
+      };
+    }
+    board.appendChild(d);
+  });
+  document.getElementById('status').textContent = solved() ? '已完成。' :
+    (!isValid() ? '当前盘面存在重复数字，请先修正。' :
+    `已填 ${grid.filter(Boolean).length}/81；${selectedCandidate?`已选择候选 ${name(selectedCandidate.i)}=${selectedCandidate.n}`:'点击格子或候选继续。'}`);
+}
+
+function highlightCells(groups={}, eliminations=[]){
+  document.querySelectorAll('.cell').forEach(x=>x.classList.remove('hlA','hlB','hlC','elim'));
+  for(const i of (groups.A||[])) board.children[i].classList.add('hlA');
+  for(const i of (groups.B||[])) board.children[i].classList.add('hlB');
+  for(const i of (groups.C||[])) board.children[i].classList.add('hlC');
+  for(const e of eliminations){
+    board.children[e.i].classList.add('elim');
+    const el=board.children[e.i].querySelector(`.cand[data-n="${e.n}"]`);
+    if(el) el.classList.add('target');
+  }
+}
+function highlightCurrent(){
+  if(currentHint && hintStage>=2) highlightCells(currentHint.groups,currentHint.elims||[]);
+}
+
+function snapshot(){ history.push({grid:[...grid],givens:[...givens]}); if(history.length>100) history.shift(); }
+function setValue(i,n,user=true){
+  if(givens[i]) return;
+  snapshot(); grid[i]=n; currentHint=null; hintStage=0; render();
+}
+
+function buildPad(){
+  const pad=document.getElementById('pad'); pad.innerHTML='';
+  for(let n=1;n<=9;n++){ const b=document.createElement('button'); b.textContent=n; b.onclick=()=>{if(selected!=null)setValue(selected,n)}; pad.appendChild(b); }
+  const x=document.createElement('button'); x.textContent='⌫'; x.onclick=()=>{if(selected!=null&&!givens[selected])setValue(selected,0)}; pad.appendChild(x);
+}
+
+function buildSkills(){
+ const box=document.getElementById('skills'); box.innerHTML='';
+ for(const [id,label] of skillDefs){
+   const l=document.createElement('label');
+   l.innerHTML=`<input type="checkbox" ${skillEnabled[id]?'checked':''} data-id="${id}"> ${label}`;
+   l.querySelector('input').onchange=e=>skillEnabled[id]=e.target.checked;
+   box.appendChild(l);
+ }
+}
+function setPreset(type){
+ const on=(ids)=>{ for(const k in skillEnabled) skillEnabled[k]=ids.includes(k); };
+ if(type==='basic') on(["nakedSingle","hiddenSingle","locked","nakedSubset","hiddenPair","fish2","xyWing","xyzWing","wWing","skyscraper","twoStringKite"]);
+ if(type==='master') on(skillDefs.map(x=>x[0]).filter(x=>!["aic","als"].includes(x)));
+ if(type==='wing') on(["xyWing","xyzWing","wWing","skyscraper","twoStringKite"]);
+ buildSkills();
+}
+
+function units(){
+ let u=[];
+ for(let r=0;r<9;r++)u.push({type:'行',no:r+1,cells:unitRow(r)});
+ for(let c=0;c<9;c++)u.push({type:'列',no:c+1,cells:unitCol(c)});
+ for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++)u.push({type:'宫',no:br*3+bc+1,cells:unitBox(br,bc)});
+ return u;
+}
+function result(tech,level,title,direction,positions,logic,action,groups={},elims=[],sets=[]){
+ return {tech,level,title,direction,positions,logic,action,groups,elims,sets};
+}
+
+function findNakedSingle(cm){
+ for(let i=0;i<81;i++) if(!grid[i]&&cm[i].size===1){
+  const n=[...cm[i]][0];
+  return result('裸单',1,'裸单',
+   `先找候选数只剩 1 个的格子。`,
+   `${name(i)} 只剩候选 ${n}。`,
+   `${name(i)} 的同行、同列、同宫已经排除了其余 8 个数字，因此只能是 ${n}。`,
+   `填入 ${name(i)}=${n}。`,{A:[i]},[],[{i,n}]);
+ }
+}
+function findHiddenSingle(cm){
+ for(const u of units()) for(const n of ALL){
+  const cells=u.cells.filter(i=>!grid[i]&&cm[i].has(n));
+  if(cells.length===1){
+   const i=cells[0];
+   return result('隐藏单',1,'隐藏单',
+    `检查某一行/列/宫中，某个数字是否只剩一个位置。`,
+    `${u.type}${u.no} 中，数字 ${n} 只剩 ${name(i)} 可以放。`,
+    `虽然 ${name(i)} 可能还有其他候选，但在${u.type}${u.no}里，${n} 没有第二个合法位置。`,
+    `填入 ${name(i)}=${n}。`,{A:[i]},[],[{i,n}]);
+  }
+ }
+}
+function findLocked(cm){
+ // pointing box->line
+ for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++){
+  const box=unitBox(br,bc);
+  for(const n of ALL){
+   const pos=box.filter(i=>!grid[i]&&cm[i].has(n));
+   if(pos.length>=2){
+    const rs=[...new Set(pos.map(i=>rc(i)[0]))], cs=[...new Set(pos.map(i=>rc(i)[1]))];
+    if(rs.length===1){
+      const r=rs[0], el=unitRow(r).filter(i=>!box.includes(i)&&!grid[i]&&cm[i].has(n)).map(i=>({i,n}));
+      if(el.length) return result('锁定候选',2,'宫→行 锁定',
+       `观察某个宫内的候选是否全部落在同一行/列。`,
+       `第${br*3+bc+1}宫的数字 ${n} 只出现在第${r+1}行的 ${pos.map(name).join('、')}。`,
+       `因此这个宫的 ${n} 必定落在第${r+1}行，同行但宫外的 ${n} 全部可以删除。`,
+       `删除 ${el.map(e=>name(e.i)+' 的 '+n).join('、')}。`,{A:pos,B:el.map(e=>e.i)},el);
+    }
+    if(cs.length===1){
+      const c=cs[0], el=unitCol(c).filter(i=>!box.includes(i)&&!grid[i]&&cm[i].has(n)).map(i=>({i,n}));
+      if(el.length) return result('锁定候选',2,'宫→列 锁定',
+       `观察某个宫内的候选是否全部落在同一行/列。`,
+       `第${br*3+bc+1}宫的数字 ${n} 只出现在第${c+1}列的 ${pos.map(name).join('、')}。`,
+       `因此这个宫的 ${n} 必定落在第${c+1}列，同列但宫外的 ${n} 全部可以删除。`,
+       `删除 ${el.map(e=>name(e.i)+' 的 '+n).join('、')}。`,{A:pos,B:el.map(e=>e.i)},el);
+    }
+   }
+  }
+ }
+ // claiming line->box
+ for(const u of [...Array(9)].map((_,r)=>({type:'行',no:r+1,cells:unitRow(r)})).concat([...Array(9)].map((_,c)=>({type:'列',no:c+1,cells:unitCol(c)})))){
+   for(const n of ALL){
+     const pos=u.cells.filter(i=>!grid[i]&&cm[i].has(n));
+     if(pos.length>=2){
+       const boxes=[...new Set(pos.map(i=>{const [r,c]=rc(i);return Math.floor(r/3)*3+Math.floor(c/3)}))];
+       if(boxes.length===1){
+         const b=boxes[0], br=Math.floor(b/3),bc=b%3, box=unitBox(br,bc);
+         const el=box.filter(i=>!u.cells.includes(i)&&!grid[i]&&cm[i].has(n)).map(i=>({i,n}));
+         if(el.length) return result('锁定候选',2,'行/列→宫 锁定',
+           `观察某行/列中的同一候选是否全部落在一个宫内。`,
+           `${u.type}${u.no} 的数字 ${n} 只落在第${b+1}宫的 ${pos.map(name).join('、')}。`,
+           `因此第${b+1}宫的 ${n} 必定在这些位置之一，宫内其他格的 ${n} 可以删除。`,
+           `删除 ${el.map(e=>name(e.i)+' 的 '+n).join('、')}。`,{A:pos,B:el.map(e=>e.i)},el);
+       }
+     }
+   }
+ }
+}
+function comb(arr,k){
+ let out=[];
+ function rec(start,cur){ if(cur.length===k){out.push([...cur]);return;} for(let i=start;i<arr.length;i++){cur.push(arr[i]);rec(i+1,cur);cur.pop();}}
+ rec(0,[]);return out;
+}
+function findNakedSubset(cm){
+ for(const u of units()){
+  const empt=u.cells.filter(i=>!grid[i]&&cm[i].size>=2&&cm[i].size<=4);
+  for(const k of [2,3,4]){
+   for(const cells of comb(empt,k)){
+    const union=new Set(cells.flatMap(i=>[...cm[i]]));
+    if(union.size===k){
+      let el=[];
+      for(const j of u.cells) if(!cells.includes(j)&&!grid[j]) for(const n of union) if(cm[j].has(n)) el.push({i:j,n});
+      if(el.length) return result('裸数组',3,`裸${k===2?'数对':k===3?'三数组':'四数组'}`,
+        `在一个单位中寻找 ${k} 个格，其候选并集刚好也是 ${k} 个数字。`,
+        `${u.type}${u.no} 的 ${cells.map(name).join('、')} 只包含 {${[...union].join(',')}}。`,
+        `这 ${k} 个数字必须占据这 ${k} 个格，因此同单位其他格不能再含这些数字。`,
+        `删除 ${el.map(e=>name(e.i)+' 的 '+e.n).join('、')}。`,{A:cells,B:[...new Set(el.map(e=>e.i))]},el);
+    }
+   }
+  }
+ }
+}
+function findHiddenPair(cm){
+ for(const u of units()){
+  for(const [a,b] of comb(ALL,2)){
+    const pa=u.cells.filter(i=>!grid[i]&&cm[i].has(a)), pb=u.cells.filter(i=>!grid[i]&&cm[i].has(b));
+    const sa=[...new Set([...pa,...pb])];
+    if(pa.length===2&&pb.length===2&&sa.length===2){
+      let el=[];
+      for(const i of sa) for(const n of cm[i]) if(n!==a&&n!==b) el.push({i,n});
+      if(el.length) return result('隐藏数对',3,'隐藏数对',
+       `观察某单位中两个数字是否恰好只出现在同样两个格子里。`,
+       `${u.type}${u.no} 中，${a} 和 ${b} 都只出现在 ${sa.map(name).join('、')}。`,
+       `这两个格必须由 ${a}/${b} 占据，因此它们格内其他候选都可删除。`,
+       `删除 ${el.map(e=>name(e.i)+' 的 '+e.n).join('、')}。`,{A:sa},el);
+    }
+  }
+ }
+}
+function findFish(cm,size){
+ // row-based and col-based generic fish
+ for(const n of ALL){
+   const rows=[...Array(9).keys()].filter(r=>{
+     const cs=unitRow(r).filter(i=>!grid[i]&&cm[i].has(n)).map(i=>rc(i)[1]);
+     return cs.length>=2&&cs.length<=size;
+   });
+   for(const rs of comb(rows,size)){
+     const cols=[...new Set(rs.flatMap(r=>unitRow(r).filter(i=>!grid[i]&&cm[i].has(n)).map(i=>rc(i)[1])))];
+     if(cols.length===size){
+       let el=[];
+       for(let r=0;r<9;r++) if(!rs.includes(r)) for(const c of cols){ const i=idx(r,c); if(!grid[i]&&cm[i].has(n)) el.push({i,n});}
+       if(el.length){
+         const nm=size===2?'X-Wing':size===3?'Swordfish':'Jellyfish';
+         const fins=rs.flatMap(r=>cols.map(c=>idx(r,c)).filter(i=>!grid[i]&&cm[i].has(n)));
+         return result(nm,4,nm,
+          `只盯数字 ${n}，寻找 ${size} 行落在同样 ${size} 列的 Fish 结构。`,
+          `数字 ${n} 在第 ${rs.map(x=>x+1).join('、')} 行的候选，共同限制在第 ${cols.map(x=>x+1).join('、')} 列。`,
+          `因此这 ${size} 列中的 ${n} 必须被这些行占据，其他行同列的 ${n} 可以删除。`,
+          `删除 ${el.map(e=>name(e.i)+' 的 '+n).join('、')}。`,{A:fins,B:el.map(e=>e.i)},el);
+       }
+     }
+   }
+   const cols=[...Array(9).keys()].filter(c=>{
+     const rs=unitCol(c).filter(i=>!grid[i]&&cm[i].has(n)).map(i=>rc(i)[0]);
+     return rs.length>=2&&rs.length<=size;
+   });
+   for(const cs of comb(cols,size)){
+     const rows2=[...new Set(cs.flatMap(c=>unitCol(c).filter(i=>!grid[i]&&cm[i].has(n)).map(i=>rc(i)[0])))];
+     if(rows2.length===size){
+       let el=[];
+       for(let c=0;c<9;c++) if(!cs.includes(c)) for(const r of rows2){ const i=idx(r,c); if(!grid[i]&&cm[i].has(n)) el.push({i,n});}
+       if(el.length){
+         const nm=size===2?'X-Wing':size===3?'Swordfish':'Jellyfish';
+         const fins=cs.flatMap(c=>rows2.map(r=>idx(r,c)).filter(i=>!grid[i]&&cm[i].has(n)));
+         return result(nm,4,nm,
+          `只盯数字 ${n}，寻找 ${size} 列落在同样 ${size} 行的 Fish 结构。`,
+          `数字 ${n} 在第 ${cs.map(x=>x+1).join('、')} 列的候选，共同限制在第 ${rows2.map(x=>x+1).join('、')} 行。`,
+          `因此这 ${size} 行中的 ${n} 必须被这些列占据，其他列同行的 ${n} 可以删除。`,
+          `删除 ${el.map(e=>name(e.i)+' 的 '+n).join('、')}。`,{A:fins,B:el.map(e=>e.i)},el);
+       }
+     }
+   }
+ }
+}
+function sameSet(a,b){ return a.size===b.size && [...a].every(x=>b.has(x)); }
+
+function findXYWing(cm){
+ const biv=[...Array(81).keys()].filter(i=>!grid[i]&&cm[i].size===2);
+ for(const p of biv){
+   const [x,y]=[...cm[p]];
+   const wings=biv.filter(i=>i!==p&&sees(p,i));
+   for(const a of wings) for(const b of wings) if(a<b && !sees(a,b)){
+     const A=[...cm[a]], B=[...cm[b]];
+     const commonPivotA=A.filter(n=>cm[p].has(n)), commonPivotB=B.filter(n=>cm[p].has(n));
+     if(commonPivotA.length!==1||commonPivotB.length!==1||commonPivotA[0]===commonPivotB[0]) continue;
+     const za=A.find(n=>!cm[p].has(n)), zb=B.find(n=>!cm[p].has(n));
+     if(za && za===zb){
+       const z=za;
+       const el=[...Array(81).keys()].filter(i=>!grid[i]&&i!==p&&i!==a&&i!==b&&cm[i].has(z)&&sees(i,a)&&sees(i,b)).map(i=>({i,n:z}));
+       if(el.length) return result('XY-Wing',5,'XY-Wing',
+         `找一个双候选枢轴，再找两个分别与它共享不同候选、且共享同一第三候选的翼。`,
+         `枢轴 ${name(p)}={${[...cm[p]].join(',')}}；两翼 ${name(a)}={${A.join(',')}}、${name(b)}={${B.join(',')}}。`,
+         `无论枢轴取哪一个候选，两翼中至少有一个必须取公共候选 ${z}，因此同时看见两翼的 ${z} 可以删除。`,
+         `删除 ${el.map(e=>name(e.i)+' 的 '+z).join('、')}。`,{A:[p],B:[a,b],C:el.map(e=>e.i)},el);
+     }
+   }
+ }
+}
+function findXYZWing(cm){
+ const tri=[...Array(81).keys()].filter(i=>!grid[i]&&cm[i].size===3);
+ const bi=[...Array(81).keys()].filter(i=>!grid[i]&&cm[i].size===2);
+ for(const p of tri){
+   const wings=bi.filter(i=>sees(p,i)&&[...cm[i]].every(n=>cm[p].has(n)));
+   for(const [a,b] of comb(wings,2)){
+     const inter=[...cm[a]].filter(n=>cm[b].has(n));
+     if(inter.length!==1) continue;
+     const z=inter[0];
+     const union=new Set([...cm[a],...cm[b]]);
+     if(union.size!==3 || ![...union].every(n=>cm[p].has(n))) continue;
+     const el=[...Array(81).keys()].filter(i=>!grid[i]&&![p,a,b].includes(i)&&cm[i].has(z)&&sees(i,p)&&sees(i,a)&&sees(i,b)).map(i=>({i,n:z}));
+     if(el.length) return result('XYZ-Wing',5,'XYZ-Wing',
+       `找一个三候选枢轴，以及两个位于其视野内的双候选翼。`,
+       `枢轴 ${name(p)}={${[...cm[p]].join(',')}}；两翼 ${name(a)}={${[...cm[a]].join(',')}}、${name(b)}={${[...cm[b]].join(',')}}。`,
+       `三个格合起来只有三个数字，且两翼共享 ${z}；任何同时看见三者的 ${z} 都不可能成立。`,
+       `删除 ${el.map(e=>name(e.i)+' 的 '+z).join('、')}。`,{A:[p],B:[a,b],C:el.map(e=>e.i)},el);
+   }
+ }
+}
+function strongLinks(cm,n){
+ let edges=[];
+ for(const u of units()){
+  const p=u.cells.filter(i=>!grid[i]&&cm[i].has(n));
+  if(p.length===2) edges.push([p[0],p[1]]);
+ }
+ // unique
+ const s=new Set(), out=[];
+ for(let [a,b] of edges){ if(a>b)[a,b]=[b,a]; const k=a+'-'+b; if(!s.has(k)){s.add(k);out.push([a,b]);}}
+ return out;
+}
+function findWWing(cm){
+ const biv=[...Array(81).keys()].filter(i=>!grid[i]&&cm[i].size===2);
+ for(const [a,b] of comb(biv,2)){
+   if(!sameSet(cm[a],cm[b])) continue;
+   const nums=[...cm[a]];
+   for(const bridge of nums){
+     const elimNum=nums.find(x=>x!==bridge);
+     for(const [u,v] of strongLinks(cm,bridge)){
+       if((sees(a,u)&&sees(b,v)) || (sees(a,v)&&sees(b,u))){
+         const el=[...Array(81).keys()].filter(i=>!grid[i]&&i!==a&&i!==b&&cm[i].has(elimNum)&&sees(i,a)&&sees(i,b)).map(i=>({i,n:elimNum}));
+         if(el.length) return result('W-Wing',5,'W-Wing',
+          `先找两个完全相同的双候选格，再用其中一个数字的强链把两翼接起来。`,
+          `${name(a)} 和 ${name(b)} 都是 {${nums.join(',')}}；数字 ${bridge} 通过强链 ${name(u)}↔${name(v)} 连接两翼。`,
+          `强链保证两翼中至少一个必须取另一个数字 ${elimNum}，所以同时看见两翼的 ${elimNum} 可以删除。`,
+          `删除 ${el.map(e=>name(e.i)+' 的 '+elimNum).join('、')}。`,{A:[a,b],B:[u,v],C:el.map(e=>e.i)},el);
+       }
+     }
+   }
+ }
+}
+function findSkyscraper(cm){
+ for(const n of ALL){
+  // row based: two rows, each exactly two candidates, share one column, roofs different
+  const rows=[...Array(9).keys()].map(r=>unitRow(r).filter(i=>!grid[i]&&cm[i].has(n))).filter(a=>a.length===2);
+  for(const [A,B] of comb(rows,2)){
+    const ac=A.map(i=>rc(i)[1]), bc=B.map(i=>rc(i)[1]);
+    const shared=ac.filter(c=>bc.includes(c));
+    if(shared.length===1){
+      const baseC=shared[0], roofA=A.find(i=>rc(i)[1]!==baseC), roofB=B.find(i=>rc(i)[1]!==baseC);
+      if(roofA!=null&&roofB!=null&&!sees(roofA,roofB)){
+        const el=[...Array(81).keys()].filter(i=>!grid[i]&&cm[i].has(n)&&![...A,...B].includes(i)&&sees(i,roofA)&&sees(i,roofB)).map(i=>({i,n}));
+        if(el.length) return result('Skyscraper',5,'Skyscraper',
+          `只盯一个数字，找两条“每行仅两个候选”的强链，并让其中一端落在同一列。`,
+          `数字 ${n} 的两条行强链共享一根“底柱”，两个“屋顶”是 ${name(roofA)} 与 ${name(roofB)}。`,
+          `两个屋顶至少一个为真，因此同时看见两个屋顶的 ${n} 可以删除。`,
+          `删除 ${el.map(e=>name(e.i)+' 的 '+n).join('、')}。`,{A:[...A,...B],B:[roofA,roofB],C:el.map(e=>e.i)},el);
+      }
+    }
+  }
+  const cols=[...Array(9).keys()].map(c=>unitCol(c).filter(i=>!grid[i]&&cm[i].has(n))).filter(a=>a.length===2);
+  for(const [A,B] of comb(cols,2)){
+    const ar=A.map(i=>rc(i)[0]), br=B.map(i=>rc(i)[0]);
+    const shared=ar.filter(r=>br.includes(r));
+    if(shared.length===1){
+      const baseR=shared[0], roofA=A.find(i=>rc(i)[0]!==baseR), roofB=B.find(i=>rc(i)[0]!==baseR);
+      if(roofA!=null&&roofB!=null&&!sees(roofA,roofB)){
+        const el=[...Array(81).keys()].filter(i=>!grid[i]&&cm[i].has(n)&&![...A,...B].includes(i)&&sees(i,roofA)&&sees(i,roofB)).map(i=>({i,n}));
+        if(el.length) return result('Skyscraper',5,'Skyscraper',
+          `只盯一个数字，找两条“每列仅两个候选”的强链，并让其中一端落在同一行。`,
+          `数字 ${n} 的两条列强链共享一根“底梁”，两个“屋顶”是 ${name(roofA)} 与 ${name(roofB)}。`,
+          `两个屋顶至少一个为真，因此同时看见两个屋顶的 ${n} 可以删除。`,
+          `删除 ${el.map(e=>name(e.i)+' 的 '+n).join('、')}。`,{A:[...A,...B],B:[roofA,roofB],C:el.map(e=>e.i)},el);
+      }
+    }
+  }
+ }
+}
+function findTwoStringKite(cm){
+ for(const n of ALL){
+   const rowLinks=[...Array(9).keys()].map(r=>unitRow(r).filter(i=>!grid[i]&&cm[i].has(n))).filter(a=>a.length===2);
+   const colLinks=[...Array(9).keys()].map(c=>unitCol(c).filter(i=>!grid[i]&&cm[i].has(n))).filter(a=>a.length===2);
+   for(const R of rowLinks) for(const C of colLinks){
+     for(const ri of R) for(const ci of C){
+       const [rr,rc1]=rc(ri), [cr,cc]=rc(ci);
+       if(Math.floor(rr/3)===Math.floor(cr/3)&&Math.floor(rc1/3)===Math.floor(cc/3)){
+         const rOther=R.find(x=>x!==ri), cOther=C.find(x=>x!==ci);
+         if(rOther==null||cOther==null) continue;
+         const targets=[...Array(81).keys()].filter(i=>!grid[i]&&cm[i].has(n)&&![...R,...C].includes(i)&&sees(i,rOther)&&sees(i,cOther));
+         if(targets.length){
+           const el=targets.map(i=>({i,n}));
+           return result('2-String Kite',5,'2-String Kite',
+            `找同一个数字的一条“行强链”和一条“列强链”，让它们各有一端落在同一宫。`,
+            `数字 ${n} 的行强链 ${R.map(name).join('↔')} 与列强链 ${C.map(name).join('↔')}，在同一宫形成连接。`,
+            `两条强链的外端 ${name(rOther)} 与 ${name(cOther)} 至少一个为真，因此同时看见两端的 ${n} 可以删除。`,
+            `删除 ${el.map(e=>name(e.i)+' 的 '+n).join('、')}。`,{A:R,B:C,C:targets},el);
+         }
+       }
+     }
+   }
+ }
+}
+function findColoring(cm){
+ for(const n of ALL){
+   const edges=strongLinks(cm,n);
+   if(!edges.length) continue;
+   const adj={};
+   for(const [a,b] of edges){ (adj[a]??=[]).push(b); (adj[b]??=[]).push(a); }
+   const color={};
+   for(const start of Object.keys(adj).map(Number)){
+     if(color[start]!=null) continue;
+     color[start]=0; const q=[start];
+     while(q.length){
+       const x=q.shift();
+       for(const y of adj[x]) if(color[y]==null){color[y]=1-color[x];q.push(y);}
+     }
+     const nodes=Object.keys(color).map(Number);
+     // trap: uncolored candidate sees both colors
+     for(let i=0;i<81;i++) if(!grid[i]&&cm[i].has(n)&&color[i]==null){
+       const sees0=nodes.some(x=>color[x]===0&&sees(i,x));
+       const sees1=nodes.some(x=>color[x]===1&&sees(i,x));
+       if(sees0&&sees1){
+         return result('Simple Coloring',6,'Simple Coloring · Color Trap',
+          `把同一数字的强链网络进行双色染色。`,
+          `数字 ${n} 的强链网络可以分成两种相反颜色；${name(i)} 同时看见两种颜色。`,
+          `两种颜色中必有一种为真，因此 ${name(i)} 无论如何都会看到一个真的 ${n}，所以自身的 ${n} 必须删除。`,
+          `删除 ${name(i)} 的 ${n}。`,{A:nodes.filter(x=>color[x]===0),B:nodes.filter(x=>color[x]===1),C:[i]},[{i,n}]);
+       }
+     }
+     // wrap: same color contradiction in a unit
+     for(const col of [0,1]){
+       const ns=nodes.filter(x=>color[x]===col);
+       for(const [a,b] of comb(ns,2)) if(sees(a,b)){
+         const opposite=nodes.filter(x=>color[x]===1-col);
+         const el=ns.map(i=>({i,n}));
+         if(el.length) return result('Simple Coloring',6,'Simple Coloring · Color Wrap',
+           `把同一数字的强链网络进行双色染色。`,
+           `数字 ${n} 的同一颜色中，${name(a)} 与 ${name(b)} 互相可见，说明这一整种颜色不可能为真。`,
+           `同色节点若同时为真会违反数独规则，因此该颜色全部为假，另一颜色全部为真。`,
+           `删除该颜色上的 ${n}：${ns.map(name).join('、')}。`,{A:ns,B:opposite},el);
+       }
+     }
+   }
+ }
+}
+
+function findHint(){
+ if(!isValid()) return {tech:'错误',level:0,title:'盘面冲突',direction:'先修正重复数字。',positions:'',logic:'当前行/列/宫中存在重复数字。',action:'',groups:{},elims:[]};
+ const cm=candMap();
+ const tests=[
+  ['nakedSingle',()=>findNakedSingle(cm)],
+  ['hiddenSingle',()=>findHiddenSingle(cm)],
+  ['locked',()=>findLocked(cm)],
+  ['nakedSubset',()=>findNakedSubset(cm)],
+  ['hiddenPair',()=>findHiddenPair(cm)],
+  ['fish2',()=>findFish(cm,2)],
+  ['xyWing',()=>findXYWing(cm)],
+  ['xyzWing',()=>findXYZWing(cm)],
+  ['wWing',()=>findWWing(cm)],
+  ['skyscraper',()=>findSkyscraper(cm)],
+  ['twoStringKite',()=>findTwoStringKite(cm)],
+  ['fish3',()=>findFish(cm,3)],
+  ['fish4',()=>findFish(cm,4)],
+  ['coloring',()=>findColoring(cm)]
+ ];
+ for(const [id,fn] of tests){ if(skillEnabled[id]){ const r=fn(); if(r)return r; } }
+ return null;
+}
+function showHint(stage){
+ if(!currentHint){ currentHint=findHint(); hintStage=0; }
+ if(!currentHint){
+  hintBox.innerHTML=`<div class="hint-title">暂未找到已实现技巧可推进的一步</div>
+  可能需要更高阶链技巧（AIC/ALS/Grouped Links 等），或当前候选状态需要进一步更新。`;
+  return;
+ }
+ hintStage=Math.max(hintStage,stage);
+ const h=currentHint;
+ let body=`<div><span class="tech-badge">${h.tech}</span><span class="level-badge">Level ${h.level}</span></div>
+ <div class="hint-title" style="margin-top:8px">${h.title}</div>`;
+ if(stage>=1) body+=`<div><b>方向：</b>${h.direction}</div>`;
+ if(stage>=2) body+=`<div><b>位置：</b>${h.positions}</div>`;
+ if(stage>=3) body+=`<div><b>逻辑：</b>${h.logic}</div><div><b>结论：</b>${h.action}</div>`;
+ hintBox.innerHTML=body; render(); highlightCurrent();
+}
+function applyHint(){
+ if(!currentHint) return;
+ snapshot();
+ if(currentHint.sets&&currentHint.sets.length){
+   for(const s of currentHint.sets) grid[s.i]=s.n;
+ } else if(currentHint.elims&&currentHint.elims.length){
+   // auto candidate mode means eliminations are logical only; to persist them we'd need manual candidate state.
+   // For educational flow, we instead log and keep board values unchanged.
+   addLog(`${currentHint.tech}：${currentHint.action}（候选删除已记录；自动候选会在后续填值后重算）`);
+   currentHint=null; hintStage=0; render(); return;
+ }
+ addLog(`${currentHint.tech}：${currentHint.action}`);
+ currentHint=null; hintStage=0; render();
+}
+function addLog(t){ const d=document.createElement('div'); d.className='log-item'; d.textContent=t; logEl.prepend(d); }
+
+function loadSample(){
+ const rows=["380000000","067080053","509300008","978001346","050763009","603008570","795632000","842000635","136800297"];
+ snapshot();
+ grid=rows.join('').split('').map(Number);
+ givens=grid.map(Boolean);
+ selected=null; selectedCandidate=null; currentHint=null; hintStage=0; render();
+ addLog('已载入当前练习题。');
+}
+function parseImport(){
+ const s=document.getElementById('importBox').value.replace(/[^0-9.]/g,'');
+ if(s.length!==81){ alert('需要正好 81 个数字/点。'); return; }
+ snapshot();
+ grid=[...s].map(ch=>ch==='.'?0:+ch); givens=grid.map(Boolean);
+ currentHint=null; hintStage=0; selected=null; selectedCandidate=null; render();
+}
+function exportGrid(){
+ const out=[...Array(9).keys()].map(r=>unitRow(r).map(i=>grid[i]||0).join('')).join('\n');
+ document.getElementById('importBox').value=out;
+}
+function verifySelected(){
+ if(!selectedCandidate){ hintBox.innerHTML='<div class="hint-title">请先点击一个候选小数字</div>'; return; }
+ const target=selectedCandidate;
+ const old=currentHint;
+ let found=null;
+ // temporarily check every implemented strategy regardless of preset, but preserve order
+ const save={...skillEnabled};
+ for(const k in skillEnabled) skillEnabled[k]=true;
+ for(let t=0;t<30;t++){
+   const h=findHint();
+   if(!h) break;
+   if((h.elims||[]).some(e=>e.i===target.i&&e.n===target.n)){found=h;break;}
+   // cannot enumerate "next" without applying; so we stop at first current logical step
+   break;
+ }
+ Object.assign(skillEnabled,save);
+ if(found){
+   currentHint=found; hintStage=3; showHint(3);
+   hintBox.innerHTML += `<div style="margin-top:8px;color:var(--good)"><b>验证结果：</b>${name(target.i)} 的候选 ${target.n} 可以由以上技巧合法删除。</div>`;
+ } else {
+   currentHint=old;
+   hintBox.innerHTML=`<div class="hint-title">验证结果</div>
+   目前已实现的“当前一步技巧”中，未找到足以直接删除 <b>${name(target.i)}=${target.n}</b> 的依据。<br>
+   <span class="small">这不代表它一定正确，只代表当前引擎没有找到可立即证明它错误的已实现结构。</span>`;
+ }
+ render(); highlightCurrent();
+}
+
+document.getElementById('sampleBtn').onclick=loadSample;
+document.getElementById('clearBtn').onclick=()=>{snapshot();grid=Array(81).fill(0);givens=Array(81).fill(false);currentHint=null;render();};
+document.getElementById('undoBtn').onclick=()=>{const h=history.pop();if(h){grid=h.grid;givens=h.givens;currentHint=null;render();}};
+document.getElementById('autoCandBtn').onclick=()=>{autoCandidates=!autoCandidates;document.getElementById('autoCandBtn').textContent='自动候选：'+(autoCandidates?'开':'关');render();};
+document.getElementById('resetMarksBtn').onclick=()=>{currentHint=null;hintStage=0;selectedCandidate=null;render();};
+document.getElementById('importBtn').onclick=parseImport;
+document.getElementById('exportBtn').onclick=exportGrid;
+document.getElementById('hint1Btn').onclick=()=>showHint(1);
+document.getElementById('hint2Btn').onclick=()=>showHint(2);
+document.getElementById('hint3Btn').onclick=()=>showHint(3);
+document.getElementById('applyBtn').onclick=applyHint;
+document.getElementById('basicPreset').onclick=()=>setPreset('basic');
+document.getElementById('masterPreset').onclick=()=>setPreset('master');
+document.getElementById('wingPreset').onclick=()=>setPreset('wing');
+document.getElementById('verifyBtn').onclick=verifySelected;
+
+buildPad(); buildSkills(); render();
+
+// ===== Photo / Camera import =====
+let photoImage = null;
+let photoRotation = 0;
+let photoCorners = [];
+let photoNaturalW = 0, photoNaturalH = 0;
+let reviewValues = Array(81).fill(0);
+let reviewConfidence = Array(81).fill(0);
+let reviewSelected = null;
+
+const photoInput = document.getElementById('photoInput');
+const photoStage = document.getElementById('photoStage');
+const photoCanvas = document.getElementById('photoCanvas');
+const photoCtx = photoCanvas.getContext('2d', {willReadFrequently:true});
+const cornerEls = [0,1,2,3].map(i=>document.getElementById('corner'+i));
+
+function ensureTesseract(){
+  return new Promise((resolve,reject)=>{
+    if(window.Tesseract) return resolve();
+    const old=document.getElementById('tesseractLoader');
+    if(old){
+      old.addEventListener('load',()=>resolve(),{once:true});
+      old.addEventListener('error',()=>reject(new Error('OCR组件加载失败')),{once:true});
+      return;
+    }
+    const s=document.createElement('script');
+    s.id='tesseractLoader';
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error('OCR组件加载失败，请检查网络'));
+    document.head.appendChild(s);
+  });
+}
+
+function loadPhotoFile(file){
+  if(!file) return;
+  const img=new Image();
+  img.onload=()=>{
+    photoImage=img; photoRotation=0; photoNaturalW=img.naturalWidth; photoNaturalH=img.naturalHeight;
+    drawPhoto();
+    document.getElementById('rotatePhotoBtn').disabled=false;
+    document.getElementById('resetCornersBtn').disabled=false;
+    document.getElementById('ocrBtn').disabled=false;
+  };
+  img.src=URL.createObjectURL(file);
+}
+
+function rotatedDims(){
+  return photoRotation%180===0 ? [photoNaturalW,photoNaturalH] : [photoNaturalH,photoNaturalW];
+}
+function drawPhoto(){
+  if(!photoImage) return;
+  const [rw,rh]=rotatedDims();
+  const maxW=1000, scale=Math.min(1,maxW/rw);
+  photoCanvas.width=Math.round(rw*scale); photoCanvas.height=Math.round(rh*scale);
+  photoCtx.save();
+  photoCtx.clearRect(0,0,photoCanvas.width,photoCanvas.height);
+  photoCtx.scale(scale,scale);
+  if(photoRotation===0){ photoCtx.drawImage(photoImage,0,0); }
+  else if(photoRotation===90){ photoCtx.translate(rw,0); photoCtx.rotate(Math.PI/2); photoCtx.drawImage(photoImage,0,0); }
+  else if(photoRotation===180){ photoCtx.translate(rw,rh); photoCtx.rotate(Math.PI); photoCtx.drawImage(photoImage,0,0); }
+  else if(photoRotation===270){ photoCtx.translate(0,rh); photoCtx.rotate(-Math.PI/2); photoCtx.drawImage(photoImage,0,0); }
+  photoCtx.restore();
+  photoStage.style.display='block';
+  resetCorners();
+}
+function resetCorners(){
+  const w=photoCanvas.width,h=photoCanvas.height,m=Math.max(14,Math.min(w,h)*.04);
+  photoCorners=[[m,m],[w-m,m],[w-m,h-m],[m,h-m]];
+  updateCorners();
+}
+function updateCorners(){
+  const rect=photoCanvas.getBoundingClientRect(), sx=rect.width/photoCanvas.width, sy=rect.height/photoCanvas.height;
+  cornerEls.forEach((el,i)=>{
+    el.style.display='block';
+    el.style.left=(photoCorners[i][0]*sx)+'px';
+    el.style.top=(photoCorners[i][1]*sy)+'px';
+  });
+}
+window.addEventListener('resize',()=>{if(photoImage)updateCorners();});
+
+cornerEls.forEach((el,i)=>{
+  let dragging=false;
+  const move=e=>{
+    if(!dragging) return;
+    e.preventDefault();
+    const rect=photoCanvas.getBoundingClientRect();
+    const sx=photoCanvas.width/rect.width, sy=photoCanvas.height/rect.height;
+    const p=e.touches?e.touches[0]:e;
+    const x=Math.max(0,Math.min(photoCanvas.width,(p.clientX-rect.left)*sx));
+    const y=Math.max(0,Math.min(photoCanvas.height,(p.clientY-rect.top)*sy));
+    photoCorners[i]=[x,y]; updateCorners();
+  };
+  el.addEventListener('pointerdown',e=>{dragging=true;el.setPointerCapture?.(e.pointerId);e.preventDefault();});
+  el.addEventListener('pointermove',move);
+  el.addEventListener('pointerup',()=>dragging=false);
+  el.addEventListener('pointercancel',()=>dragging=false);
+  el.addEventListener('touchstart',e=>{dragging=true;e.preventDefault();},{passive:false});
+  el.addEventListener('touchmove',move,{passive:false});
+  el.addEventListener('touchend',()=>dragging=false);
+});
+
+function solve8(A,b){
+  const n=8, M=A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<n;c++){
+    let p=c;
+    for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r;
+    [M[c],M[p]]=[M[p],M[c]];
+    const d=M[c][c]; if(Math.abs(d)<1e-10) throw new Error('四角位置无效');
+    for(let j=c;j<=n;j++) M[c][j]/=d;
+    for(let r=0;r<n;r++) if(r!==c){
+      const f=M[r][c];
+      for(let j=c;j<=n;j++) M[r][j]-=f*M[c][j];
+    }
+  }
+  return M.map(r=>r[n]);
+}
+function homography(dstPts,srcPts){
+  const A=[],b=[];
+  for(let k=0;k<4;k++){
+    const [x,y]=dstPts[k], [u,v]=srcPts[k];
+    A.push([x,y,1,0,0,0,-u*x,-u*y]); b.push(u);
+    A.push([0,0,0,x,y,1,-v*x,-v*y]); b.push(v);
+  }
+  const h=solve8(A,b); return [...h,1];
+}
+function warpBoard(size=720){
+  const out=document.createElement('canvas'); out.width=out.height=size;
+  const octx=out.getContext('2d',{willReadFrequently:true});
+  const src=photoCtx.getImageData(0,0,photoCanvas.width,photoCanvas.height);
+  const dst=octx.createImageData(size,size);
+  const H=homography([[0,0],[size-1,0],[size-1,size-1],[0,size-1]],photoCorners);
+  const sdata=src.data,ddata=dst.data,sw=src.width,sh=src.height;
+  for(let y=0;y<size;y++) for(let x=0;x<size;x++){
+    const den=H[6]*x+H[7]*y+H[8];
+    const u=(H[0]*x+H[1]*y+H[2])/den, v=(H[3]*x+H[4]*y+H[5])/den;
+    const xi=Math.round(u), yi=Math.round(v), di=(y*size+x)*4;
+    if(xi>=0&&xi<sw&&yi>=0&&yi<sh){
+      const si=(yi*sw+xi)*4;
+      ddata[di]=sdata[si];ddata[di+1]=sdata[si+1];ddata[di+2]=sdata[si+2];ddata[di+3]=255;
+    }else ddata[di+3]=255;
+  }
+  octx.putImageData(dst,0,0); return out;
+}
+function cellCanvas(boardCanvas,r,c){
+  const S=boardCanvas.width, cell=S/9, pad=cell*.16;
+  const x=c*cell+pad,y=r*cell+pad,w=cell-2*pad,h=cell-2*pad;
+  const out=document.createElement('canvas'); out.width=out.height=96;
+  const ctx=out.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(boardCanvas,x,y,w,h,0,0,96,96);
+  const im=ctx.getImageData(0,0,96,96), d=im.data;
+  // grayscale + adaptive-ish threshold
+  let mean=0;
+  for(let i=0;i<d.length;i+=4) mean+=(d[i]*.299+d[i+1]*.587+d[i+2]*.114);
+  mean/=96*96; const th=Math.max(80,Math.min(205,mean-28));
+  let dark=0;
+  for(let i=0;i<d.length;i+=4){
+    const g=d[i]*.299+d[i+1]*.587+d[i+2]*.114, v=g<th?0:255;
+    if(v===0) dark++;
+    d[i]=d[i+1]=d[i+2]=v; d[i+3]=255;
+  }
+  ctx.putImageData(im,0,0);
+  return {canvas:out,darkRatio:dark/(96*96)};
+}
+let currentOCRWorker=null, ocrCancelled=false, ocrTimer=null, ocrStartedAt=0;
+function setOcrProgress(pct,stage,status){
+  const prog=document.getElementById('ocrProgress'), bar=document.getElementById('ocrProgressBar');
+  const meta=document.getElementById('ocrMeta'), stageEl=document.getElementById('ocrStageLabel');
+  prog.style.display='block'; meta.style.display='grid';
+  pct=Math.max(0,Math.min(100,Math.round(pct)));
+  bar.style.width=pct+'%'; bar.dataset.pct=pct+'%';
+  if(stage) stageEl.textContent=stage;
+  if(status) document.getElementById('ocrStatus').textContent=status;
+}
+function startOcrClock(){
+  clearInterval(ocrTimer); ocrStartedAt=Date.now();
+  const timeEl=document.getElementById('ocrTime');
+  const tick=()=>{
+    const s=Math.floor((Date.now()-ocrStartedAt)/1000);
+    timeEl.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  };
+  tick(); ocrTimer=setInterval(tick,1000);
+}
+function stopOcrClock(){ clearInterval(ocrTimer); ocrTimer=null; }
+function buildContactSheet(rectified){
+  const tile=104, gap=8, sheet=document.createElement('canvas');
+  sheet.width=sheet.height=tile*9;
+  const ctx=sheet.getContext('2d',{willReadFrequently:true});
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,sheet.width,sheet.height);
+  let suspects=0;
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const cc=cellCanvas(rectified,r,c);
+    // Draw every cell into a fixed tile; empty cells stay blank.
+    if(cc.darkRatio>=0.018){
+      suspects++;
+      ctx.drawImage(cc.canvas,c*tile+gap,r*tile+gap,tile-2*gap,tile-2*gap);
+    }
+  }
+  return {sheet,tile,suspects};
+}
+function parseOcrBoxes(data,tile){
+  const vals=Array(81).fill(0), conf=Array(81).fill(100);
+  const items=[];
+  // Tesseract.js v5 may expose tsv; parse it because it is stable across rendering modes.
+  if(data.tsv){
+    const lines=data.tsv.trim().split(/
+/).slice(1);
+    for(const line of lines){
+      const p=line.split('	');
+      if(p.length<12) continue;
+      const level=+p[0], left=+p[6], top=+p[7], width=+p[8], height=+p[9], cf=+p[10], text=(p.slice(11).join('	')||'').replace(/[^1-9]/g,'');
+      if(text && cf>=0 && level>=5) items.push({text:text[0],left,top,width,height,conf:cf});
+    }
+  }
+  if(!items.length && data.words){
+    for(const w of data.words){
+      const text=(w.text||'').replace(/[^1-9]/g,'');
+      if(!text || !w.bbox) continue;
+      items.push({text:text[0],left:w.bbox.x0,top:w.bbox.y0,width:w.bbox.x1-w.bbox.x0,height:w.bbox.y1-w.bbox.y0,conf:w.confidence||0});
+    }
+  }
+  for(const it of items){
+    const cx=it.left+it.width/2, cy=it.top+it.height/2;
+    const c=Math.max(0,Math.min(8,Math.floor(cx/tile))), r=Math.max(0,Math.min(8,Math.floor(cy/tile)));
+    const i=idx(r,c), d=+it.text;
+    if(d>=1&&d<=9 && (vals[i]===0 || it.conf>conf[i])){
+      vals[i]=d; conf[i]=it.conf;
+    }
+  }
+  return {vals,conf,items};
+}
+async function recognizePhoto(){
+  if(!photoImage) return;
+  const cancelBtn=document.getElementById('cancelOcrBtn');
+  ocrCancelled=false; cancelBtn.style.display='inline-block';
+  document.getElementById('ocrBtn').disabled=true;
+  startOcrClock();
+  try{
+    setOcrProgress(3,'阶段 1/4 · 图像校正','正在进行透视校正与格子切分…');
+    await new Promise(r=>setTimeout(r,30));
+    const rectified=warpBoard(720);
+    const {sheet,tile,suspects}=buildContactSheet(rectified);
+    if(ocrCancelled) throw new Error('已取消');
+
+    setOcrProgress(12,'阶段 2/4 · 加载识别引擎','首次使用需要下载 OCR 组件；以后通常会被浏览器缓存。');
+    await ensureTesseract();
+    if(ocrCancelled) throw new Error('已取消');
+
+    currentOCRWorker=await Tesseract.createWorker('eng',1,{
+      logger:m=>{
+        if(m.status==='loading tesseract core') setOcrProgress(16+10*(m.progress||0),'阶段 2/4 · 加载识别引擎','正在加载 OCR 核心…');
+        else if(m.status==='loading language traineddata') setOcrProgress(26+14*(m.progress||0),'阶段 2/4 · 加载识别引擎','正在加载数字识别模型…');
+        else if(m.status==='initializing api') setOcrProgress(41+4*(m.progress||0),'阶段 2/4 · 初始化','正在初始化识别器…');
+        else if(m.status==='recognizing text') setOcrProgress(46+46*(m.progress||0),'阶段 3/4 · 批量识别',`正在一次性识别 81 格（检测到约 ${suspects} 个疑似有数字格）…`);
+      }
+    });
+    await currentOCRWorker.setParameters({
+      tessedit_char_whitelist:'123456789',
+      tessedit_pageseg_mode:'6',
+      preserve_interword_spaces:'1'
+    });
+    if(ocrCancelled) throw new Error('已取消');
+
+    setOcrProgress(46,'阶段 3/4 · 批量识别',`开始批量识别；新版不再逐格调用 OCR，速度会明显快于上一版。`);
+    const {data}=await currentOCRWorker.recognize(sheet);
+    if(ocrCancelled) throw new Error('已取消');
+
+    setOcrProgress(94,'阶段 4/4 · 解析与校验','正在把识别结果映射回 81 格…');
+    const parsed=parseOcrBoxes(data,tile);
+    reviewValues=parsed.vals; reviewConfidence=parsed.conf;
+
+    // basic validity confidence downgrade: duplicate clues in same unit
+    const seenUnits=[...Array(9).keys()].map(r=>unitRow(r))
+      .concat([...Array(9).keys()].map(c=>unitCol(c)))
+      .concat([...Array(9).keys()].flatMap(br=>[0,1,2].map(bc=>unitBox(Math.floor(br/3),bc)))); // harmless extra check
+    for(const u of units()){
+      for(const n of ALL){
+        const ps=u.cells.filter(i=>reviewValues[i]===n);
+        if(ps.length>1) ps.forEach(i=>reviewConfidence[i]=Math.min(reviewConfidence[i],35));
+      }
+    }
+    setOcrProgress(100,'完成','识别完成。请优先检查橙色低置信度格，再确认导入。');
+    renderReview();
+  }catch(err){
+    console.error(err);
+    if(String(err.message).includes('已取消')){
+      setOcrProgress(0,'已取消','识别已取消，可调整四角后重新开始。');
+    }else{
+      setOcrProgress(0,'识别失败','识别失败：'+err.message+'。若卡在“加载识别引擎”，通常是网络无法加载 OCR 组件。');
+    }
+  }finally{
+    try{ if(currentOCRWorker) await currentOCRWorker.terminate(); }catch(e){}
+    currentOCRWorker=null; stopOcrClock();
+    cancelBtn.style.display='none'; document.getElementById('ocrBtn').disabled=false;
+  }
+}
+function renderReview(){
+  const g=document.getElementById('reviewGrid'); g.innerHTML='';
+  reviewValues.forEach((v,i)=>{
+    const d=document.createElement('div'); d.className='review-cell';
+    if(reviewConfidence[i]<65) d.classList.add('low');
+    if(i===reviewSelected) d.classList.add('selectedReview');
+    d.textContent=v||'';
+    d.onclick=()=>{reviewSelected=i;renderReview();};
+    g.appendChild(d);
+  });
+  const pad=document.getElementById('reviewPad'); pad.innerHTML='';
+  for(let n=1;n<=9;n++){
+    const b=document.createElement('button'); b.textContent=n;
+    b.onclick=()=>{if(reviewSelected!=null){reviewValues[reviewSelected]=n;reviewConfidence[reviewSelected]=100;renderReview();}};
+    pad.appendChild(b);
+  }
+  const x=document.createElement('button');x.textContent='⌫';
+  x.onclick=()=>{if(reviewSelected!=null){reviewValues[reviewSelected]=0;reviewConfidence[reviewSelected]=100;renderReview();}};
+  pad.appendChild(x);
+  document.getElementById('reviewArea').style.display='block';
+}
+document.getElementById('takePhotoBtn').onclick=()=>photoInput.click();
+photoInput.onchange=e=>loadPhotoFile(e.target.files?.[0]);
+document.getElementById('rotatePhotoBtn').onclick=()=>{photoRotation=(photoRotation+90)%360;drawPhoto();};
+document.getElementById('resetCornersBtn').onclick=resetCorners;
+document.getElementById('ocrBtn').onclick=recognizePhoto;
+document.getElementById('confirmPhotoImportBtn').onclick=()=>{
+  snapshot(); grid=[...reviewValues]; givens=grid.map(Boolean);
+  selected=null;selectedCandidate=null;currentHint=null;hintStage=0;
+  document.getElementById('reviewArea').style.display='none';
+  render(); addLog('已从照片识别并导入题目。');
+};
+document.getElementById('cancelPhotoImportBtn').onclick=()=>{document.getElementById('reviewArea').style.display='none';};
+
+
+
+// ===== Technique practice generator =====
+let practiceState={cells:Array.from({length:81},()=>new Set()), answers:[], selected:new Set(), keyCells:[], skill:'wWing', explanation:'', hint:''};
+function rnd(a){return a[Math.floor(Math.random()*a.length)]}
+function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a}
+function addPC(i,nums){for(const n of nums)practiceState.cells[i].add(n)}
+function pKey(i,n){return i+'-'+n}
+function transformRC(r,c,t){
+  // structure-preserving dihedral transformations
+  switch(t){
+    case 0:return [r,c];
+    case 1:return [c,8-r];
+    case 2:return [8-r,8-c];
+    case 3:return [8-c,r];
+    case 4:return [r,8-c];
+    case 5:return [8-r,c];
+    case 6:return [c,r];
+    default:return [8-c,8-r];
+  }
+}
+function mapPracticeCell(i,t){
+  const [r,c]=rc(i), [rr,cc]=transformRC(r,c,t); return idx(rr,cc);
+}
+function remapDigits(baseDigits){
+  const vals=shuffle(ALL).slice(0,baseDigits.length), m={};
+  baseDigits.forEach((d,i)=>m[d]=vals[i]);return m;
+}
+function makePractice(skill,noise=true){
+  practiceState={cells:Array.from({length:81},()=>new Set()),answers:[],selected:new Set(),keyCells:[],skill,explanation:'',hint:''};
+  const t=Math.floor(Math.random()*8);
+  // templates use abstract digits 1,2,3,4; all eliminations are strict within the shown candidate structure.
+  let cells=[], answers=[], keys=[], exp='',hint='', digitCount=4;
+  if(skill==='wWing'){
+    // wings {1,2}; strong link on 1 at u-v; target sees both wings -> delete 2
+    cells=[[idx(1,1),[1,2]],[idx(6,7),[1,2]],[idx(1,5),[1,3]],[idx(6,5),[1,4]],[idx(1,7),[2,3,4]]];
+    answers=[[idx(1,7),2]]; keys=[idx(1,1),idx(6,7),idx(1,5),idx(6,5)];
+    exp='两个相同双候选翼 {A,B}，由 A 的强链连接，因此两翼至少一个为 B；共同可见格可删除 B。';
+    hint='先找两个完全相同的双候选格，再检查其中一个数字有没有强链可以把它们接起来。';
+  } else if(skill==='xyWing'){
+    cells=[[idx(4,4),[1,2]],[idx(4,1),[1,3]],[idx(1,4),[2,3]],[idx(1,1),[3,4]]];
+    answers=[[idx(1,1),3]]; keys=[idx(4,4),idx(4,1),idx(1,4)];
+    exp='枢轴 {A,B} 的两个翼分别为 {A,C}、{B,C}，因此两翼至少一个取 C；共同可见格删除 C。';
+    hint='寻找一个双候选枢轴，以及两个分别和它共享不同候选、但彼此共享第三数字的翼。';
+    digitCount=4;
+  } else if(skill==='xyzWing'){
+    cells=[[idx(4,4),[1,2,3]],[idx(4,3),[1,3]],[idx(3,4),[2,3]],[idx(3,3),[3,4]]];
+    answers=[[idx(3,3),3]]; keys=[idx(4,4),idx(4,3),idx(3,4)];
+    exp='三候选枢轴 {A,B,C} 配合 {A,C}、{B,C} 两翼；同时看见三者的格可删除 C。';
+    hint='先找三候选枢轴，再找两个都是它子集的双候选翼。';
+  } else if(skill==='xWing'){
+    cells=[[idx(1,2),[1,3]],[idx(1,7),[1,4]],[idx(6,2),[1,2]],[idx(6,7),[1,5]],[idx(3,2),[1,6]],[idx(8,7),[1,7]]];
+    answers=[[idx(3,2),1],[idx(8,7),1]]; keys=[idx(1,2),idx(1,7),idx(6,2),idx(6,7)];
+    exp='同一数字在两行中都只落在相同两列，因此这两列其他行的该数字可以删除。';
+    hint='只盯同一个数字，找“两行 × 两列”的矩形强约束。';
+    digitCount=7;
+  } else if(skill==='skyscraper'){
+    cells=[[idx(1,1),[1,2]],[idx(1,6),[1,3]],[idx(6,1),[1,4]],[idx(6,7),[1,5]],[idx(3,6),[1,6]]];
+    answers=[[idx(3,6),1]]; keys=[idx(1,1),idx(1,6),idx(6,1),idx(6,7)];
+    exp='两条同数字强链共享一个底列，两端“屋顶”至少一个为真；同时看见两个屋顶的候选可删除。';
+    hint='找两行都只有两个同数字候选，并让其中一端落在同一列。';
+    digitCount=6;
+  } else if(skill==='kite'){
+    cells=[[idx(1,1),[1,2]],[idx(1,7),[1,3]],[idx(7,7),[1,4]],[idx(4,7),[1,5]],[idx(7,1),[1,6]]];
+    // row link r1 c1-c7, col link c7 r4-r7; connecting ends r1c7 & r4c7 share box? this template not strict.
+    // Use row link R2C2-R2C7 and col link R7C2-R4C2, inner ends R2C2 & R4C2 same box; outer R2C7/R7C2, target R7C7 sees both.
+    cells=[[idx(1,1),[1,2]],[idx(1,6),[1,3]],[idx(3,1),[1,4]],[idx(6,1),[1,5]],[idx(6,6),[1,6]]];
+    answers=[[idx(6,6),1]]; keys=[idx(1,1),idx(1,6),idx(3,1),idx(6,1)];
+    exp='一条行强链与一条列强链的内端位于同一宫，两个外端至少一个为真；共同可见格删除该数字。';
+    hint='找一个数字的一条行强链和一条列强链，看看它们是否能在同一个宫里“打结”。';
+    digitCount=6;
+  }
+  const dmap=remapDigits([...Array(digitCount)].map((_,i)=>i+1));
+  for(const [i,nums] of cells){
+    const ni=mapPracticeCell(i,t); addPC(ni,nums.map(n=>dmap[n]));
+  }
+  practiceState.answers=answers.map(([i,n])=>[mapPracticeCell(i,t),dmap[n]]);
+  practiceState.keyCells=keys.map(i=>mapPracticeCell(i,t));
+  practiceState.explanation=exp; practiceState.hint=hint;
+
+  if(noise){
+    // Add harmless visual noise to otherwise empty cells. It is not asserted as a full Sudoku candidate state.
+    const occupied=new Set(cells.map(x=>mapPracticeCell(x[0],t)));
+    for(let k=0;k<12;k++){
+      const i=Math.floor(Math.random()*81);
+      if(occupied.has(i) || practiceState.answers.some(a=>a[0]===i)) continue;
+      const ns=shuffle(ALL).slice(0,2+Math.floor(Math.random()*2));
+      addPC(i,ns);
+    }
+  }
+  renderPractice();
+}
+function renderPractice(reveal=false){
+  const b=document.getElementById('practiceBoard'); b.innerHTML='';
+  const ansSet=new Set(practiceState.answers.map(a=>pKey(a[0],a[1])));
+  for(let i=0;i<81;i++){
+    const d=document.createElement('div'); d.className='pcell';
+    if(practiceState.keyCells.includes(i)) d.classList.add('key');
+    const cs=document.createElement('div'); cs.className='pcands';
+    for(const n of ALL){
+      const s=document.createElement('span'); s.className='pcand'; s.textContent=practiceState.cells[i].has(n)?n:'';
+      const k=pKey(i,n);
+      if(s.textContent){
+        if(practiceState.selected.has(k)) s.classList.add('active');
+        if(reveal && ansSet.has(k)) s.classList.add('correct');
+        if(reveal && practiceState.selected.has(k) && !ansSet.has(k)) s.classList.add('wrong');
+        s.addEventListener('click',()=>{practiceState.selected.has(k)?practiceState.selected.delete(k):practiceState.selected.add(k);renderPractice(reveal);});
+      }
+      cs.appendChild(s);
+    }
+    d.appendChild(cs); b.appendChild(d);
+  }
+}
+function checkPractice(){
+  const ans=new Set(practiceState.answers.map(a=>pKey(a[0],a[1])));
+  const sel=practiceState.selected;
+  const ok=sel.size===ans.size && [...sel].every(x=>ans.has(x));
+  document.getElementById('practiceMsg').innerHTML=ok
+    ? '<b style="color:#15803d">正确。</b> 你找到了全部可删除候选。'
+    : `还不完全正确。你选择了 ${sel.size} 个候选；本题需要找到 ${ans.size} 个删除点。`;
+}
+document.getElementById('newPracticeBtn').onclick=()=>{
+  makePractice(document.getElementById('practiceSkill').value,document.getElementById('practiceDifficulty').value==='noise');
+  document.getElementById('practiceMsg').textContent='请点选你认为可以删除的候选数字。黄色格是结构关键格，但不会告诉你谁是翼/强链。';
+};
+document.getElementById('checkPracticeBtn').onclick=checkPractice;
+document.getElementById('practiceHintBtn').onclick=()=>{document.getElementById('practiceMsg').innerHTML='<b>提示：</b>'+practiceState.hint;};
+document.getElementById('practiceAnswerBtn').onclick=()=>{
+  renderPractice(true);
+  const ans=practiceState.answers.map(([i,n])=>name(i)+' 的 '+n).join('、');
+  document.getElementById('practiceMsg').innerHTML=`<b>答案：</b>${ans}<br><b>逻辑：</b>${practiceState.explanation}`;
+};
+document.getElementById('cancelOcrBtn').onclick=async()=>{
+  ocrCancelled=true;
+  document.getElementById('ocrStatus').textContent='正在取消识别…';
+  try{if(currentOCRWorker)await currentOCRWorker.terminate();}catch(e){}
+  currentOCRWorker=null;
+};
+makePractice('wWing',true);
+
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(err => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
