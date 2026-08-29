@@ -63,6 +63,18 @@ button{border:0;background:none;color:inherit}
 .progress-meta{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12px;color:var(--muted)}
 .photo-box{border:1px dashed #c7c7cc;border-radius:18px;padding:14px;text-align:center;background:#fafafa}
 .photo-box img{max-width:100%;border-radius:14px;display:none;margin-top:10px}
+.photo-stage{position:relative;margin-top:12px;display:none;touch-action:none}
+.photo-stage canvas{display:block;width:100%;height:auto;border-radius:14px;background:#111}
+.crop-corner{position:absolute;width:30px;height:30px;border-radius:50%;background:var(--accent);border:4px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.22);transform:translate(-50%,-50%);touch-action:none}
+.crop-help{margin-top:9px;font-size:12px;color:var(--muted);line-height:1.5}
+.review-grid{border:2px solid #1d1d1f;border-radius:8px;overflow:hidden;gap:0;background:#fff}
+.review-cell{border-radius:0;border-right:1px solid #d8d8dc;border-bottom:1px solid #d8d8dc;background:#fff}
+.review-cell:nth-child(3n){border-right:2px solid #1d1d1f}
+.review-cell:nth-child(9n){border-right:0}
+.review-cell:nth-child(n+19):nth-child(-n+27),.review-cell:nth-child(n+46):nth-child(-n+54){border-bottom:2px solid #1d1d1f}
+.review-cell:nth-child(n+73){border-bottom:0}
+.review-cell.low{background:#fff2d7}
+
 .review-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:3px;margin-top:10px}
 .review-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#f2f2f7;font-size:14px}
 .review-cell.low{background:#fff2d7}
@@ -93,7 +105,7 @@ button{border:0;background:none;color:inherit}
 <main class="app">
   <header class="topbar">
     <div class="brand"><h1>数独教练</h1><p>iPhone 优先 · 进阶技巧训练</p></div>
-    <div class="version">v3.0</div>
+    <div class="version">v3.1</div>
   </header>
 
   <section id="page-solve" class="page active">
@@ -127,10 +139,20 @@ button{border:0;background:none;color:inherit}
       <div class="photo-box">
         <button class="btn primary" id="pickPhotoBtn">拍照或选择照片</button>
         <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
-        <img id="photoPreview" alt="照片预览">
-        <div class="small" style="margin-top:10px">建议正对数独拍摄。OCR 只在此页面按需加载，即使识别失败也不会影响做题功能。</div>
+        <div id="photoStage" class="photo-stage">
+          <canvas id="photoCanvas"></canvas>
+          <button type="button" class="crop-corner" id="corner0" aria-label="左上角"></button>
+          <button type="button" class="crop-corner" id="corner1" aria-label="右上角"></button>
+          <button type="button" class="crop-corner" id="corner2" aria-label="右下角"></button>
+          <button type="button" class="crop-corner" id="corner3" aria-label="左下角"></button>
+        </div>
+        <div class="crop-help">照片载入后，把 4 个蓝点拖到数独外框四个角。新版会先切成 81 格，再过滤小号备注数字，只把“居中、尺寸足够大的主数字”交给 OCR。</div>
       </div>
-      <button class="btn soft" id="recognizeBtn" style="width:100%;margin-top:12px" disabled>识别题目</button>
+      <div class="hero-actions" style="margin-top:12px">
+        <button class="btn" id="resetCornersBtn" disabled>重置四角</button>
+        <button class="btn" id="rotatePhotoBtn" disabled>旋转90°</button>
+        <button class="btn soft" id="recognizeBtn" disabled>识别题目</button>
+      </div>
       <div class="progress-shell"><div id="ocrBar" class="progress-bar"></div></div>
       <div class="progress-meta"><span id="ocrStage">等待照片</span><span id="ocrPct">0%</span></div>
       <div id="ocrReview" class="review-grid"></div>
@@ -260,27 +282,116 @@ function findStep(){
 }
 $$('[data-hint]').forEach(btn=>btn.onclick=()=>{const step=findStep();const lv=+btn.dataset.hint;if(!step){$('#hintBox').textContent='当前基础引擎没有找到可直接推进的步骤。后续版本会继续增加 Wing/AIC 等更高阶链式技巧。';return}$('#hintBox').innerHTML=lv===1?`<b>${step.tech}</b><br>${step.short}`:lv===2?`<b>${step.tech}</b><br>关键位置：${step.cells.map(name).join('、')}${step.elim?'<br>关注可删除位置：'+step.elim.map(name).join('、'):''}`:`<b>${step.tech}</b><br>${step.text}`});
 
-let photoFile=null;
+let photoImage=null, photoRotation=0, photoCorners=[], reviewConfidence=Array(81).fill(0);
+const photoCanvas=$('#photoCanvas'), photoCtx=photoCanvas.getContext('2d',{willReadFrequently:true});
+const cornerEls=[0,1,2,3].map(i=>$('#corner'+i));
+
 $('#pickPhotoBtn').onclick=()=>$('#photoInput').click();
-$('#photoInput').onchange=e=>{photoFile=e.target.files?.[0]||null;if(!photoFile)return;const url=URL.createObjectURL(photoFile);$('#photoPreview').src=url;$('#photoPreview').style.display='block';$('#recognizeBtn').disabled=false;$('#ocrStage').textContent='照片已载入';$('#ocrPct').textContent='0%'};
-function progress(p,s){$('#ocrBar').style.width=p+'%';$('#ocrPct').textContent=Math.round(p)+'%';$('#ocrStage').textContent=s}
+$('#photoInput').onchange=e=>{
+  const file=e.target.files?.[0]; if(!file)return;
+  const img=new Image();
+  img.onload=()=>{photoImage=img;photoRotation=0;drawPhoto();$('#recognizeBtn').disabled=false;$('#resetCornersBtn').disabled=false;$('#rotatePhotoBtn').disabled=false;progress(0,'照片已载入，请先对齐四角')};
+  img.src=URL.createObjectURL(file);
+};
+function rotatedDims(){return photoRotation%180===0?[photoImage.naturalWidth,photoImage.naturalHeight]:[photoImage.naturalHeight,photoImage.naturalWidth]}
+function drawPhoto(){
+  if(!photoImage)return;
+  const [rw,rh]=rotatedDims(), maxW=1000, scale=Math.min(1,maxW/rw);
+  photoCanvas.width=Math.round(rw*scale);photoCanvas.height=Math.round(rh*scale);
+  photoCtx.save();photoCtx.clearRect(0,0,photoCanvas.width,photoCanvas.height);photoCtx.scale(scale,scale);
+  if(photoRotation===0)photoCtx.drawImage(photoImage,0,0);
+  else if(photoRotation===90){photoCtx.translate(rw,0);photoCtx.rotate(Math.PI/2);photoCtx.drawImage(photoImage,0,0)}
+  else if(photoRotation===180){photoCtx.translate(rw,rh);photoCtx.rotate(Math.PI);photoCtx.drawImage(photoImage,0,0)}
+  else {photoCtx.translate(0,rh);photoCtx.rotate(-Math.PI/2);photoCtx.drawImage(photoImage,0,0)}
+  photoCtx.restore();$('#photoStage').style.display='block';resetCorners()
+}
+function resetCorners(){
+  const w=photoCanvas.width,h=photoCanvas.height,m=Math.max(12,Math.min(w,h)*.05);
+  photoCorners=[[m,m],[w-m,m],[w-m,h-m],[m,h-m]];updateCorners()
+}
+function updateCorners(){
+  const rect=photoCanvas.getBoundingClientRect(),sx=rect.width/photoCanvas.width,sy=rect.height/photoCanvas.height;
+  cornerEls.forEach((el,i)=>{el.style.left=photoCorners[i][0]*sx+'px';el.style.top=photoCorners[i][1]*sy+'px'})
+}
+window.addEventListener('resize',()=>{if(photoImage)updateCorners()});
+cornerEls.forEach((el,i)=>{
+  let drag=false;
+  const move=e=>{if(!drag)return;e.preventDefault();const rect=photoCanvas.getBoundingClientRect();const sx=photoCanvas.width/rect.width,sy=photoCanvas.height/rect.height;const p=e.touches?e.touches[0]:e;photoCorners[i]=[Math.max(0,Math.min(photoCanvas.width,(p.clientX-rect.left)*sx)),Math.max(0,Math.min(photoCanvas.height,(p.clientY-rect.top)*sy))];updateCorners()};
+  el.addEventListener('pointerdown',e=>{drag=true;el.setPointerCapture?.(e.pointerId);e.preventDefault()});
+  el.addEventListener('pointermove',move);el.addEventListener('pointerup',()=>drag=false);el.addEventListener('pointercancel',()=>drag=false)
+});
+$('#resetCornersBtn').onclick=resetCorners;
+$('#rotatePhotoBtn').onclick=()=>{photoRotation=(photoRotation+90)%360;drawPhoto()};
+
+function solve8(A,b){const n=8,M=A.map((r,i)=>[...r,b[i]]);for(let c=0;c<n;c++){let p=c;for(let r=c+1;r<n;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;[M[c],M[p]]=[M[p],M[c]];const d=M[c][c];if(Math.abs(d)<1e-10)throw new Error('四角位置无效');for(let j=c;j<=n;j++)M[c][j]/=d;for(let r=0;r<n;r++)if(r!==c){const f=M[r][c];for(let j=c;j<=n;j++)M[r][j]-=f*M[c][j]}}return M.map(r=>r[n])}
+function homography(dst,src){const A=[],b=[];for(let k=0;k<4;k++){const [x,y]=dst[k],[u,v]=src[k];A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v)}return [...solve8(A,b),1]}
+function warpBoard(size=720){
+  const out=document.createElement('canvas');out.width=out.height=size;const oc=out.getContext('2d',{willReadFrequently:true});
+  const src=photoCtx.getImageData(0,0,photoCanvas.width,photoCanvas.height),dst=oc.createImageData(size,size);
+  const H=homography([[0,0],[size-1,0],[size-1,size-1],[0,size-1]],photoCorners),sd=src.data,dd=dst.data,sw=src.width,sh=src.height;
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){const den=H[6]*x+H[7]*y+H[8],u=(H[0]*x+H[1]*y+H[2])/den,v=(H[3]*x+H[4]*y+H[5])/den,xi=Math.round(u),yi=Math.round(v),di=(y*size+x)*4;if(xi>=0&&xi<sw&&yi>=0&&yi<sh){const si=(yi*sw+xi)*4;dd[di]=sd[si];dd[di+1]=sd[si+1];dd[di+2]=sd[si+2];dd[di+3]=255}else{dd[di]=dd[di+1]=dd[di+2]=255;dd[di+3]=255}}
+  oc.putImageData(dst,0,0);return out
+}
+function largestComponent(bin,w,h){
+  const seen=new Uint8Array(w*h);let best=null;const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){const st=y*w+x;if(!bin[st]||seen[st])continue;let stack=[st],area=0,minx=x,maxx=x,miny=y,maxy=y;seen[st]=1;
+    while(stack.length){const q=stack.pop(),qy=Math.floor(q/w),qx=q-qy*w;area++;if(qx<minx)minx=qx;if(qx>maxx)maxx=qx;if(qy<miny)miny=qy;if(qy>maxy)maxy=qy;for(const [dx,dy] of dirs){const nx=qx+dx,ny=qy+dy,ni=ny*w+nx;if(nx>0&&nx<w-1&&ny>0&&ny<h-1&&bin[ni]&&!seen[ni]){seen[ni]=1;stack.push(ni)}}}
+    if(!best||area>best.area)best={area,minx,maxx,miny,maxy}
+  }return best
+}
+function analyzeCell(board,r,c){
+  const S=board.width,cell=S/9,pad=cell*.19,x=c*cell+pad,y=r*cell+pad,ww=cell-2*pad,hh=cell-2*pad,N=96;
+  const cv=document.createElement('canvas');cv.width=cv.height=N;const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(board,x,y,ww,hh,0,0,N,N);
+  const im=cx.getImageData(0,0,N,N),d=im.data;let mean=0;for(let k=0;k<d.length;k+=4)mean+=.299*d[k]+.587*d[k+1]+.114*d[k+2];mean/=N*N;const th=Math.max(75,Math.min(205,mean-34));const bin=new Uint8Array(N*N);
+  for(let p=0,k=0;p<bin.length;p++,k+=4){const g=.299*d[k]+.587*d[k+1]+.114*d[k+2],dark=g<th;bin[p]=dark?1:0;const v=dark?0:255;d[k]=d[k+1]=d[k+2]=v;d[k+3]=255}
+  cx.putImageData(im,0,0);const comp=largestComponent(bin,N,N);
+  if(!comp)return{canvas:cv,isMain:false,score:0};
+  const bw=comp.maxx-comp.minx+1,bh=comp.maxy-comp.miny+1,centerX=(comp.minx+comp.maxx+1)/(2*N),centerY=(comp.miny+comp.maxy+1)/(2*N),areaRatio=comp.area/(N*N);
+  // 主数字通常明显大于候选备注，并位于格子中部。窄的“1”也允许，所以宽度阈值较低。
+  const sizeOK=bh>=N*.40 && bw>=N*.07 && areaRatio>=.018;
+  const centerOK=centerX>=.16&&centerX<=.84&&centerY>=.18&&centerY<=.82;
+  const isMain=sizeOK&&centerOK;
+  const score=Math.min(100,Math.round((bh/N)*70+(areaRatio*300)));
+  return{canvas:cv,isMain,score,metrics:{bw,bh,areaRatio,centerX,centerY}}
+}
+function buildContactSheet(board){
+  const tile=108,gap=10,sheet=document.createElement('canvas');sheet.width=sheet.height=tile*9;const sc=sheet.getContext('2d',{willReadFrequently:true});sc.fillStyle='#fff';sc.fillRect(0,0,sheet.width,sheet.height);
+  const accepted=Array(81).fill(false),scores=Array(81).fill(0);let count=0;
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){const a=analyzeCell(board,r,c),i=idx(r,c);scores[i]=a.score;if(a.isMain){accepted[i]=true;count++;sc.drawImage(a.canvas,c*tile+gap,r*tile+gap,tile-2*gap,tile-2*gap)}}
+  return{sheet,tile,accepted,scores,count}
+}
 async function loadTesseract(){
  if(window.Tesseract)return;
  await new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';sc.onload=res;sc.onerror=()=>rej(new Error('OCR组件加载失败'));document.head.appendChild(sc)})
 }
+function progress(p,s){$('#ocrBar').style.width=p+'%';$('#ocrPct').textContent=Math.round(p)+'%';$('#ocrStage').textContent=s}
+function parseBoxes(data,tile,accepted,scores){
+  const vals=Array(81).fill(0),conf=Array(81).fill(0),items=[];
+  if(data.tsv){for(const line of data.tsv.trim().split(/\n/).slice(1)){const p=line.split('\t');if(p.length<12)continue;const text=(p.slice(11).join('\t')||'').replace(/[^1-9]/g,'');if(!text)continue;items.push({n:+text[0],left:+p[6],top:+p[7],width:+p[8],height:+p[9],cf:+p[10]})}}
+  if(!items.length&&data.words){for(const w of data.words||[]){const text=(w.text||'').replace(/[^1-9]/g,'');if(text&&w.bbox)items.push({n:+text[0],left:w.bbox.x0,top:w.bbox.y0,width:w.bbox.x1-w.bbox.x0,height:w.bbox.y1-w.bbox.y0,cf:w.confidence||0})}}
+  for(const it of items){const c=Math.floor((it.left+it.width/2)/tile),r=Math.floor((it.top+it.height/2)/tile);if(r<0||r>8||c<0||c>8)continue;const i=idx(r,c);if(!accepted[i])continue;if(it.n>=1&&it.n<=9&&it.cf>=25){vals[i]=it.n;conf[i]=Math.min(100,Math.round((it.cf+scores[i])/2))}}
+  return{vals,conf}
+}
 $('#recognizeBtn').onclick=async()=>{
- if(!photoFile)return;$('#recognizeBtn').disabled=true;progress(5,'准备图像');
+ if(!photoImage)return;$('#recognizeBtn').disabled=true;progress(4,'透视校正并切分 81 格');
  try{
-   await loadTesseract();progress(18,'加载 OCR 引擎');
-   const worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text')progress(25+65*(m.progress||0),'识别中')}});await worker.setParameters({tessedit_char_whitelist:'123456789',tessedit_pageseg_mode:'6'});
-   const {data}=await worker.recognize(photoFile);await worker.terminate();progress(94,'解析结果');
-   // OCR整图仅作初步识别：取识别出的数字序列，用户需复核
-   const digs=(data.text||'').replace(/[^1-9]/g,'').slice(0,81).split('').map(Number);state.ocr=Array(81).fill(0);digs.forEach((n,i)=>state.ocr[i]=n);renderReview();progress(100,'完成，请人工复核');$('#importOcrBtn').style.display='block';
- }catch(e){progress(0,'识别失败：'+e.message)}
+   const board=warpBoard(720),pack=buildContactSheet(board);progress(16,`已过滤备注，仅保留 ${pack.count} 个疑似主数字格`);
+   await loadTesseract();progress(24,'加载 OCR 引擎');
+   const worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text')progress(28+62*(m.progress||0),'批量识别主数字')}});
+   await worker.setParameters({tessedit_char_whitelist:'123456789',tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'});
+   const {data}=await worker.recognize(pack.sheet);await worker.terminate();progress(94,'按 9×9 坐标映射结果');
+   const parsed=parseBoxes(data,pack.tile,pack.accepted,pack.scores);state.ocr=parsed.vals;reviewConfidence=parsed.conf;renderReview();progress(100,'完成：小备注格已留空，请复核橙色格');$('#importOcrBtn').style.display='block'
+ }catch(e){console.error(e);progress(0,'识别失败：'+e.message)}
  finally{$('#recognizeBtn').disabled=false}
 };
-function renderReview(){const g=$('#ocrReview');g.innerHTML='';for(let i=0;i<81;i++){const d=document.createElement('button');d.type='button';d.className='review-cell';d.textContent=state.ocr[i]||'';d.onclick=()=>{const v=prompt(`${name(i)}：输入 1-9，留空删除`,state.ocr[i]||'');if(v===null)return;state.ocr[i]=/^[1-9]$/.test(v)?+v:0;renderReview()};g.appendChild(d)}}
-$('#importOcrBtn').onclick=()=>{snapshot();state.values=[...state.ocr];state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));render();$$('.tab').find(t=>t.dataset.page==='solve').click()};
+function renderReview(){
+  const g=$('#ocrReview');g.innerHTML='';
+  for(let i=0;i<81;i++){const d=document.createElement('button');d.type='button';d.className='review-cell';if(state.ocr[i]&&reviewConfidence[i]<60)d.classList.add('low');d.textContent=state.ocr[i]||'';d.onclick=()=>{const v=prompt(`${name(i)}：输入 1-9；留空表示该格没有主数字`,state.ocr[i]||'');if(v===null)return;state.ocr[i]=/^[1-9]$/.test(v)?+v:0;reviewConfidence[i]=100;renderReview()};g.appendChild(d)}
+}
+$('#importOcrBtn').onclick=()=>{
+  snapshot();state.values=[...state.ocr];state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));state.notes=Array.from({length:81},()=>new Set());state.selected=0;render();
+  const solveTab=$$('.tab').find(t=>t.dataset.page==='solve');if(solveTab)solveTab.click()
+};
 
 let prac={cells:Array.from({length:81},()=>new Set()),ans:[],sel:new Set(),msg:''};
 function pkey(i,n){return i+'-'+n} function prAdd(i,ns){ns.forEach(n=>prac.cells[i].add(n))}
