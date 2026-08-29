@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>数独教练</title>
+<meta name="theme-color" content="#f5f5f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="数独教练">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<style>
+:root{
+  --bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--muted:#6e6e73;--line:#d2d2d7;
+  --accent:#007aff;--accent-soft:#eaf3ff;--danger:#ff3b30;--ok:#34c759;
+  --shadow:0 8px 24px rgba(0,0,0,.06);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif}
+body{padding:env(safe-area-inset-top) 0 calc(86px + env(safe-area-inset-bottom));}
+button,select,input{font:inherit}
+button{border:0;background:none;color:inherit}
+.app{max-width:760px;margin:auto;padding:14px 14px 22px}
+.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:4px 2px 12px}
+.brand h1{font-size:28px;line-height:1.1;margin:0;font-weight:800;letter-spacing:-.4px}
+.brand p{margin:5px 0 0;font-size:13px;color:var(--muted)}
+.version{font-size:12px;color:var(--muted);white-space:nowrap}
+.card{background:var(--card);border-radius:22px;padding:14px;box-shadow:var(--shadow);margin-bottom:14px}
+.hero-actions{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:9px}
+.btn{min-height:46px;border-radius:14px;padding:10px 12px;background:#f2f2f7;font-weight:650;color:var(--text);border:1px solid rgba(0,0,0,.04)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.soft{background:var(--accent-soft);color:var(--accent)}
+.btn.danger{color:var(--danger)}
+.btn:active{transform:scale(.985)}
+.sudoku-wrap{display:flex;justify-content:center;padding:4px 0 8px}
+.board{width:min(100%,560px);aspect-ratio:1;display:grid;grid-template-columns:repeat(9,1fr);background:#fff;border:2.5px solid #1d1d1f;border-radius:8px;overflow:hidden}
+.cell{position:relative;min-width:0;border-right:1px solid #d8d8dc;border-bottom:1px solid #d8d8dc;background:#fff}
+.cell:nth-child(3n){border-right:2px solid #1d1d1f}
+.cell:nth-child(9n){border-right:0}
+.cell:nth-child(n+19):nth-child(-n+27),.cell:nth-child(n+46):nth-child(-n+54){border-bottom:2px solid #1d1d1f}
+.cell:nth-child(n+73){border-bottom:0}
+.cell.selected{background:#dfeeff}
+.cell.peer{background:#f3f8ff}
+.cell.same{background:#eaf3ff}
+.cell.conflict{background:#ffe8e6}
+.big{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(20px,6.7vw,34px);font-weight:600}
+.given .big{font-weight:800;color:#111}
+.user .big{color:var(--accent)}
+.cands{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);font-size:clamp(7px,2.2vw,11px);color:#7a7a80}
+.cand{display:flex;align-items:center;justify-content:center}
+.keypad{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;margin-top:10px}
+.key{min-height:46px;border-radius:12px;background:#f2f2f7;color:var(--accent);font-size:22px;font-weight:700}
+.key:active{background:#e5e5ea}
+.mode-row{display:flex;gap:8px;margin-top:10px;overflow:auto;padding-bottom:2px}
+.pill{flex:0 0 auto;min-height:38px;border-radius:999px;padding:8px 13px;background:#f2f2f7;color:var(--muted);font-weight:650}
+.pill.active{background:var(--accent-soft);color:var(--accent)}
+.section-title{font-size:19px;font-weight:800;margin:2px 0 10px}
+.hint-box{background:#f7f7f9;border-radius:16px;padding:13px;line-height:1.6;font-size:14px;min-height:84px}
+.hint-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.progress-shell{height:10px;background:#e5e5ea;border-radius:999px;overflow:hidden;margin-top:12px}
+.progress-bar{height:100%;width:0;background:var(--accent);transition:width .2s ease}
+.progress-meta{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12px;color:var(--muted)}
+.photo-box{border:1px dashed #c7c7cc;border-radius:18px;padding:14px;text-align:center;background:#fafafa}
+.photo-box img{max-width:100%;border-radius:14px;display:none;margin-top:10px}
+.review-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:3px;margin-top:10px}
+.review-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#f2f2f7;font-size:14px}
+.review-cell.low{background:#fff2d7}
+.practice-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.practice-board{margin-top:10px;border:2px solid #1d1d1f;border-radius:8px;overflow:hidden;display:grid;grid-template-columns:repeat(9,1fr);aspect-ratio:1;background:white}
+.pcell{position:relative;border-right:1px solid #ddd;border-bottom:1px solid #ddd}
+.pcell:nth-child(3n){border-right:2px solid #222}.pcell:nth-child(9n){border-right:0}
+.pcell:nth-child(n+19):nth-child(-n+27),.pcell:nth-child(n+46):nth-child(-n+54){border-bottom:2px solid #222}.pcell:nth-child(n+73){border-bottom:0}
+.pcands{position:absolute;inset:1px;display:grid;grid-template-columns:repeat(3,1fr);font-size:clamp(7px,2vw,11px)}
+.pc{display:flex;align-items:center;justify-content:center;border-radius:4px}
+.pc.pick{background:#dfeeff;color:var(--accent);font-weight:800}.pc.answer{background:#dcfce7;color:#166534;font-weight:800}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(250,250,252,.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid rgba(0,0,0,.08);padding:8px max(10px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+.tabbar-inner{max-width:760px;margin:auto;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.tab{min-height:52px;border-radius:13px;font-size:11px;color:#8e8e93;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.tab b{font-size:20px;line-height:1}.tab.active{color:var(--accent);background:var(--accent-soft)}
+.page{display:none}.page.active{display:block}
+.setting-row{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:12px 2px;border-bottom:1px solid #eee}
+.setting-row:last-child{border-bottom:0}
+.toggle{width:51px;height:31px;border-radius:999px;background:#d1d1d6;padding:2px;position:relative}
+.toggle::after{content:"";position:absolute;width:27px;height:27px;border-radius:50%;background:white;left:2px;top:2px;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:.2s}
+.toggle.on{background:var(--ok)}.toggle.on::after{left:22px}
+.small{font-size:12px;color:var(--muted);line-height:1.5}
+.status-good{color:#16803b}.status-bad{color:var(--danger)}
+@media(min-width:700px){.app{padding-top:22px}.brand h1{font-size:32px}.keypad{gap:9px}.card{padding:18px}}
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="topbar">
+    <div class="brand"><h1>数独教练</h1><p>iPhone 优先 · 进阶技巧训练</p></div>
+    <div class="version">v3.0</div>
+  </header>
+
+  <section id="page-solve" class="page active">
+    <div class="card">
+      <div class="hero-actions">
+        <button class="btn primary" id="sampleBtn">载入练习题</button>
+        <button class="btn" id="undoBtn">撤销</button>
+        <button class="btn danger" id="clearBtn">清空</button>
+      </div>
+      <div class="mode-row">
+        <button class="pill active" id="valueModeBtn">填数字</button>
+        <button class="pill" id="candidateModeBtn">候选笔记</button>
+        <button class="pill active" id="autoCandBtn">自动候选：开</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sudoku-wrap"><div id="board" class="board" aria-label="数独棋盘"></div></div>
+      <div id="keypad" class="keypad"></div>
+      <div class="mode-row">
+        <button class="pill" id="eraseBtn">⌫ 删除</button>
+        <button class="pill" id="checkBtn">检查冲突</button>
+        <button class="pill" id="copyBtn">导出题目</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="page-photo" class="page">
+    <div class="card">
+      <div class="section-title">拍照 / 照片导入</div>
+      <div class="photo-box">
+        <button class="btn primary" id="pickPhotoBtn">拍照或选择照片</button>
+        <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+        <img id="photoPreview" alt="照片预览">
+        <div class="small" style="margin-top:10px">建议正对数独拍摄。OCR 只在此页面按需加载，即使识别失败也不会影响做题功能。</div>
+      </div>
+      <button class="btn soft" id="recognizeBtn" style="width:100%;margin-top:12px" disabled>识别题目</button>
+      <div class="progress-shell"><div id="ocrBar" class="progress-bar"></div></div>
+      <div class="progress-meta"><span id="ocrStage">等待照片</span><span id="ocrPct">0%</span></div>
+      <div id="ocrReview" class="review-grid"></div>
+      <button class="btn primary" id="importOcrBtn" style="width:100%;margin-top:12px;display:none">确认导入棋盘</button>
+    </div>
+  </section>
+
+  <section id="page-hint" class="page">
+    <div class="card">
+      <div class="section-title">分层提示</div>
+      <div class="hint-box" id="hintBox">先在“做题”页输入或导入数独，再回来获取提示。</div>
+      <div class="hint-actions">
+        <button class="btn primary" data-hint="1">提示 1</button>
+        <button class="btn" data-hint="2">提示 2</button>
+        <button class="btn soft" data-hint="3">完整逻辑</button>
+      </div>
+      <div class="small" style="margin-top:10px">当前版本优先识别：单数、隐藏单数、锁定候选、裸对、XY-Wing、W-Wing。后续可继续加 AIC / ALS 等。</div>
+    </div>
+  </section>
+
+  <section id="page-practice" class="page">
+    <div class="card">
+      <div class="section-title">特定技巧专练</div>
+      <div class="practice-controls">
+        <select class="btn" id="practiceSkill">
+          <option value="w">W-Wing</option><option value="xy">XY-Wing</option><option value="x">X-Wing</option>
+        </select>
+        <button class="btn primary" id="newPracticeBtn">生成新题</button>
+      </div>
+      <div id="practiceBoard" class="practice-board"></div>
+      <div class="mode-row">
+        <button class="pill" id="practiceCheck">检查</button>
+        <button class="pill" id="practiceHint">提示</button>
+        <button class="pill" id="practiceAnswer">答案</button>
+      </div>
+      <div id="practiceMsg" class="hint-box" style="margin-top:10px">点“生成新题”开始。</div>
+    </div>
+  </section>
+
+  <section id="page-settings" class="page">
+    <div class="card">
+      <div class="section-title">设置</div>
+      <div class="setting-row"><div><b>自动候选</b><div class="small">空格自动显示合法候选</div></div><button class="toggle on" id="autoToggle"></button></div>
+      <div class="setting-row"><div><b>高亮同数字</b><div class="small">选择数字时高亮同数字</div></div><button class="toggle on" id="sameToggle"></button></div>
+      <div class="setting-row"><div><b>安装状态</b><div class="small" id="installState">检测中…</div></div></div>
+      <div class="setting-row"><div><b>数据</b><div class="small">当前版本仅保存在本机浏览器中</div></div><button class="btn" id="resetBtn">重置</button></div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <div class="tabbar-inner">
+    <button class="tab active" data-page="solve"><b>▦</b><span>做题</span></button>
+    <button class="tab" data-page="photo"><b>▧</b><span>拍照</span></button>
+    <button class="tab" data-page="hint"><b>?</b><span>提示</span></button>
+    <button class="tab" data-page="practice"><b>◎</b><span>专练</span></button>
+    <button class="tab" data-page="settings"><b>⚙</b><span>设置</span></button>
+  </div>
+</nav>
+
+<script>
+(()=>{
+'use strict';
+const ALL=[1,2,3,4,5,6,7,8,9];
+const state={values:Array(81).fill(0),givens:new Set(),notes:Array.from({length:81},()=>new Set()),selected:0,mode:'value',auto:true,highlightSame:true,history:[],ocr:Array(81).fill(0)};
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const rc=i=>[Math.floor(i/9),i%9], idx=(r,c)=>r*9+c, name=i=>{const [r,c]=rc(i);return `R${r+1}C${c+1}`};
+function peers(i){const [r,c]=rc(i),s=new Set();for(let k=0;k<9;k++){s.add(idx(r,k));s.add(idx(k,c))}const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3;for(let rr=br;rr<br+3;rr++)for(let cc=bc;cc<bc+3;cc++)s.add(idx(rr,cc));s.delete(i);return s}
+function cand(i){if(state.values[i])return [];const used=new Set([...peers(i)].map(j=>state.values[j]).filter(Boolean));return ALL.filter(n=>!used.has(n))}
+function snapshot(){state.history.push({values:[...state.values],givens:[...state.givens],notes:state.notes.map(s=>[...s])});if(state.history.length>40)state.history.shift()}
+function restore(x){state.values=[...x.values];state.givens=new Set(x.givens);state.notes=x.notes.map(a=>new Set(a));render()}
+function hasConflict(i){const v=state.values[i];if(!v)return false;return [...peers(i)].some(j=>state.values[j]===v)}
+function render(){
+ const b=$('#board');b.innerHTML='';
+ const pset=peers(state.selected), sv=state.values[state.selected];
+ for(let i=0;i<81;i++){
+   const d=document.createElement('button');d.type='button';d.className='cell';
+   if(i===state.selected)d.classList.add('selected');else if(pset.has(i))d.classList.add('peer');
+   if(state.highlightSame&&sv&&state.values[i]===sv)d.classList.add('same');
+   if(hasConflict(i))d.classList.add('conflict');
+   if(state.givens.has(i))d.classList.add('given');else if(state.values[i])d.classList.add('user');
+   if(state.values[i]){const x=document.createElement('div');x.className='big';x.textContent=state.values[i];d.appendChild(x)}
+   else{const cs=document.createElement('div');cs.className='cands';const arr=state.auto?cand(i):[...state.notes[i]];for(const n of ALL){const s=document.createElement('span');s.className='cand';s.textContent=arr.includes(n)?n:'';cs.appendChild(s)}d.appendChild(cs)}
+   d.addEventListener('click',()=>{state.selected=i;render()});b.appendChild(d);
+ }
+ $('#autoCandBtn').textContent='自动候选：'+(state.auto?'开':'关');$('#autoCandBtn').classList.toggle('active',state.auto);$('#autoToggle').classList.toggle('on',state.auto);$('#sameToggle').classList.toggle('on',state.highlightSame);
+ try{localStorage.setItem('sudokuCoachV3',JSON.stringify({values:state.values,givens:[...state.givens],notes:state.notes.map(s=>[...s]),auto:state.auto,highlightSame:state.highlightSame}))}catch(e){}
+}
+function enter(n){
+ const i=state.selected;if(state.givens.has(i))return;snapshot();
+ if(state.mode==='value'){state.values[i]=state.values[i]===n?0:n;state.notes[i].clear()}
+ else if(!state.values[i]){state.notes[i].has(n)?state.notes[i].delete(n):state.notes[i].add(n)}
+ render()
+}
+function erase(){const i=state.selected;if(state.givens.has(i))return;snapshot();state.values[i]=0;state.notes[i].clear();render()}
+function loadSample(){
+ const s='380000000067080053509300008978001346050763009603008570795632000842000635136800297';
+ snapshot();state.values=[...s].map(Number);state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));state.notes=Array.from({length:81},()=>new Set());render()
+}
+for(const n of ALL){const k=document.createElement('button');k.type='button';k.className='key';k.textContent=n;k.addEventListener('click',()=>enter(n));$('#keypad').appendChild(k)}
+$('#sampleBtn').onclick=loadSample;
+$('#clearBtn').onclick=()=>{snapshot();state.values.fill(0);state.givens.clear();state.notes=Array.from({length:81},()=>new Set());render()};
+$('#undoBtn').onclick=()=>{const x=state.history.pop();if(x)restore(x)};
+$('#eraseBtn').onclick=erase;
+$('#valueModeBtn').onclick=()=>{state.mode='value';$('#valueModeBtn').classList.add('active');$('#candidateModeBtn').classList.remove('active')};
+$('#candidateModeBtn').onclick=()=>{state.mode='note';$('#candidateModeBtn').classList.add('active');$('#valueModeBtn').classList.remove('active')};
+$('#autoCandBtn').onclick=()=>{state.auto=!state.auto;render()};
+$('#autoToggle').onclick=()=>{state.auto=!state.auto;render()};
+$('#sameToggle').onclick=()=>{state.highlightSame=!state.highlightSame;render()};
+$('#checkBtn').onclick=()=>{const bad=state.values.some((v,i)=>v&&hasConflict(i));alert(bad?'存在行、列或宫冲突。':'当前没有直接冲突。')};
+$('#copyBtn').onclick=()=>{const s=state.values.join('');prompt('复制下面的81位题目字符串：',s)};
+$('#resetBtn').onclick=()=>{localStorage.removeItem('sudokuCoachV3');location.reload()};
+
+$$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');$$('.page').forEach(x=>x.classList.remove('active'));$('#page-'+t.dataset.page).classList.add('active')});
+
+function units(){const out=[];for(let r=0;r<9;r++)out.push(ALL.map((_,c)=>idx(r,c)));for(let c=0;c<9;c++)out.push(ALL.map((_,r)=>idx(r,c)));for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++){const a=[];for(let r=br*3;r<br*3+3;r++)for(let c=bc*3;c<bc*3+3;c++)a.push(idx(r,c));out.push(a)}return out}
+function findStep(){
+ // naked single
+ for(let i=0;i<81;i++){const c=cand(i);if(!state.values[i]&&c.length===1)return{tech:'裸单',cells:[i],text:`${name(i)} 只有候选 ${c[0]}，因此确定为 ${c[0]}。`,short:'先找候选只剩一个的格。'}}
+ // hidden single
+ for(const u of units())for(const n of ALL){const ps=u.filter(i=>!state.values[i]&&cand(i).includes(n));if(ps.length===1)return{tech:'隐藏单数',cells:ps,text:`数字 ${n} 在当前单位中只剩 ${name(ps[0])} 可以放。`,short:`只盯数字 ${n}，检查某一行/列/宫是否只剩一个位置。`}}
+ // locked candidate
+ for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++){const box=[];for(let r=br*3;r<br*3+3;r++)for(let c=bc*3;c<bc*3+3;c++)box.push(idx(r,c));for(const n of ALL){const ps=box.filter(i=>!state.values[i]&&cand(i).includes(n));if(ps.length>=2){const rs=new Set(ps.map(i=>rc(i)[0])),cs=new Set(ps.map(i=>rc(i)[1]));if(rs.size===1){const r=[...rs][0],elim=ALL.map((_,c)=>idx(r,c)).filter(i=>!box.includes(i)&&!state.values[i]&&cand(i).includes(n));if(elim.length)return{tech:'锁定候选（指向）',cells:ps,elim,text:`宫内数字 ${n} 只落在第 ${r+1} 行，因此该行宫外的 ${n} 可删除。`,short:`在某一宫内找数字 ${n} 是否被锁在同一行。`}}if(cs.size===1){const c=[...cs][0],elim=ALL.map((_,r)=>idx(r,c)).filter(i=>!box.includes(i)&&!state.values[i]&&cand(i).includes(n));if(elim.length)return{tech:'锁定候选（指向）',cells:ps,elim,text:`宫内数字 ${n} 只落在第 ${c+1} 列，因此该列宫外的 ${n} 可删除。`,short:`在某一宫内找数字 ${n} 是否被锁在同一列。`}}}}}
+ // naked pair
+ for(const u of units()){const bis=u.filter(i=>!state.values[i]&&cand(i).length===2);for(let a=0;a<bis.length;a++)for(let b=a+1;b<bis.length;b++){const ca=cand(bis[a]).join(''),cb=cand(bis[b]).join('');if(ca===cb){const nums=cand(bis[a]),elim=u.filter(i=>i!==bis[a]&&i!==bis[b]&&!state.values[i]&&cand(i).some(n=>nums.includes(n)));if(elim.length)return{tech:'裸对',cells:[bis[a],bis[b]],elim,text:`${name(bis[a])} 与 ${name(bis[b])} 构成 {${nums.join(',')}} 裸对，因此同单位其他格可删除这两个候选。`,short:`找两个候选完全相同的双候选格。`}}}}
+ return null
+}
+$$('[data-hint]').forEach(btn=>btn.onclick=()=>{const step=findStep();const lv=+btn.dataset.hint;if(!step){$('#hintBox').textContent='当前基础引擎没有找到可直接推进的步骤。后续版本会继续增加 Wing/AIC 等更高阶链式技巧。';return}$('#hintBox').innerHTML=lv===1?`<b>${step.tech}</b><br>${step.short}`:lv===2?`<b>${step.tech}</b><br>关键位置：${step.cells.map(name).join('、')}${step.elim?'<br>关注可删除位置：'+step.elim.map(name).join('、'):''}`:`<b>${step.tech}</b><br>${step.text}`});
+
+let photoFile=null;
+$('#pickPhotoBtn').onclick=()=>$('#photoInput').click();
+$('#photoInput').onchange=e=>{photoFile=e.target.files?.[0]||null;if(!photoFile)return;const url=URL.createObjectURL(photoFile);$('#photoPreview').src=url;$('#photoPreview').style.display='block';$('#recognizeBtn').disabled=false;$('#ocrStage').textContent='照片已载入';$('#ocrPct').textContent='0%'};
+function progress(p,s){$('#ocrBar').style.width=p+'%';$('#ocrPct').textContent=Math.round(p)+'%';$('#ocrStage').textContent=s}
+async function loadTesseract(){
+ if(window.Tesseract)return;
+ await new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';sc.onload=res;sc.onerror=()=>rej(new Error('OCR组件加载失败'));document.head.appendChild(sc)})
+}
+$('#recognizeBtn').onclick=async()=>{
+ if(!photoFile)return;$('#recognizeBtn').disabled=true;progress(5,'准备图像');
+ try{
+   await loadTesseract();progress(18,'加载 OCR 引擎');
+   const worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text')progress(25+65*(m.progress||0),'识别中')}});await worker.setParameters({tessedit_char_whitelist:'123456789',tessedit_pageseg_mode:'6'});
+   const {data}=await worker.recognize(photoFile);await worker.terminate();progress(94,'解析结果');
+   // OCR整图仅作初步识别：取识别出的数字序列，用户需复核
+   const digs=(data.text||'').replace(/[^1-9]/g,'').slice(0,81).split('').map(Number);state.ocr=Array(81).fill(0);digs.forEach((n,i)=>state.ocr[i]=n);renderReview();progress(100,'完成，请人工复核');$('#importOcrBtn').style.display='block';
+ }catch(e){progress(0,'识别失败：'+e.message)}
+ finally{$('#recognizeBtn').disabled=false}
+};
+function renderReview(){const g=$('#ocrReview');g.innerHTML='';for(let i=0;i<81;i++){const d=document.createElement('button');d.type='button';d.className='review-cell';d.textContent=state.ocr[i]||'';d.onclick=()=>{const v=prompt(`${name(i)}：输入 1-9，留空删除`,state.ocr[i]||'');if(v===null)return;state.ocr[i]=/^[1-9]$/.test(v)?+v:0;renderReview()};g.appendChild(d)}}
+$('#importOcrBtn').onclick=()=>{snapshot();state.values=[...state.ocr];state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));render();$$('.tab').find(t=>t.dataset.page==='solve').click()};
+
+let prac={cells:Array.from({length:81},()=>new Set()),ans:[],sel:new Set(),msg:''};
+function pkey(i,n){return i+'-'+n} function prAdd(i,ns){ns.forEach(n=>prac.cells[i].add(n))}
+function genPractice(){
+ prac={cells:Array.from({length:81},()=>new Set()),ans:[],sel:new Set(),msg:''};const sk=$('#practiceSkill').value;
+ if(sk==='w'){prAdd(idx(1,1),[1,2]);prAdd(idx(1,5),[1,3]);prAdd(idx(6,5),[1,4]);prAdd(idx(6,7),[1,2]);prAdd(idx(1,7),[2,5]);prac.ans=[[idx(1,7),2]];prac.msg='寻找两个相同双候选翼，并用强链把其中一个数字连接起来。'}
+ else if(sk==='xy'){prAdd(idx(4,4),[1,2]);prAdd(idx(4,1),[1,3]);prAdd(idx(1,4),[2,3]);prAdd(idx(1,1),[3,4]);prac.ans=[[idx(1,1),3]];prac.msg='找枢轴 {A,B} 与两个翼 {A,C}/{B,C}。'}
+ else {prAdd(idx(1,2),[1,3]);prAdd(idx(1,7),[1,4]);prAdd(idx(6,2),[1,2]);prAdd(idx(6,7),[1,5]);prAdd(idx(3,2),[1,6]);prAdd(idx(8,7),[1,7]);prac.ans=[[idx(3,2),1],[idx(8,7),1]];prac.msg='只盯同一个数字，找两行×两列矩形。'}
+ renderPractice();$('#practiceMsg').textContent='点选你认为可以删除的候选数字。'
+}
+function renderPractice(show=false){const b=$('#practiceBoard');b.innerHTML='';const aset=new Set(prac.ans.map(x=>pkey(...x)));for(let i=0;i<81;i++){const c=document.createElement('div');c.className='pcell';const cs=document.createElement('div');cs.className='pcands';for(const n of ALL){const s=document.createElement('button');s.type='button';s.className='pc';s.textContent=prac.cells[i].has(n)?n:'';const k=pkey(i,n);if(prac.sel.has(k))s.classList.add('pick');if(show&&aset.has(k))s.classList.add('answer');if(s.textContent)s.onclick=()=>{prac.sel.has(k)?prac.sel.delete(k):prac.sel.add(k);renderPractice(show)};cs.appendChild(s)}c.appendChild(cs);b.appendChild(c)}}
+$('#newPracticeBtn').onclick=genPractice;$('#practiceHint').onclick=()=>$('#practiceMsg').textContent=prac.msg||'先生成一题。';$('#practiceAnswer').onclick=()=>{renderPractice(true);$('#practiceMsg').textContent='绿色候选为可删除答案。'};$('#practiceCheck').onclick=()=>{const a=new Set(prac.ans.map(x=>pkey(...x)));const ok=prac.sel.size===a.size&&[...prac.sel].every(x=>a.has(x));$('#practiceMsg').textContent=ok?'正确。':'还不完全正确，可以再观察结构。'};
+
+try{const x=JSON.parse(localStorage.getItem('sudokuCoachV3')||'null');if(x){state.values=x.values||state.values;state.givens=new Set(x.givens||[]);state.notes=(x.notes||[]).length===81?x.notes.map(a=>new Set(a)):state.notes;state.auto=x.auto!==false;state.highlightSame=x.highlightSame!==false}}catch(e){}
+$('#installState').textContent=window.matchMedia('(display-mode: standalone)').matches?'已从主屏幕作为 App 运行':'当前在浏览器中运行，可“添加到主屏幕”';
+render();genPractice();
+})();
+</script>
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn))}
+</script>
+</body></html>
