@@ -105,7 +105,7 @@ button{border:0;background:none;color:inherit}
 <main class="app">
   <header class="topbar">
     <div class="brand"><h1>数独教练</h1><p>iPhone 优先 · 进阶技巧训练</p></div>
-    <div class="version">v3.1</div>
+    <div class="version">v4.0</div>
   </header>
 
   <section id="page-solve" class="page active">
@@ -169,7 +169,8 @@ button{border:0;background:none;color:inherit}
         <button class="btn" data-hint="2">提示 2</button>
         <button class="btn soft" data-hint="3">完整逻辑</button>
       </div>
-      <div class="small" style="margin-top:10px">当前版本优先识别：单数、隐藏单数、锁定候选、裸对、XY-Wing、W-Wing。后续可继续加 AIC / ALS 等。</div>
+      <button class="btn primary" id="applyHintBtn" style="width:100%;margin-top:10px">执行这一步</button>
+      <div class="small" style="margin-top:10px">支持：单数、锁定候选、数组、Fish、XY/XYZ/W-Wing、Skyscraper、2-String Kite；极难盘面会使用“矛盾链”给出可验证的排除理由。</div>
     </div>
   </section>
 
@@ -217,13 +218,13 @@ button{border:0;background:none;color:inherit}
 (()=>{
 'use strict';
 const ALL=[1,2,3,4,5,6,7,8,9];
-const state={values:Array(81).fill(0),givens:new Set(),notes:Array.from({length:81},()=>new Set()),selected:0,mode:'value',auto:true,highlightSame:true,history:[],ocr:Array(81).fill(0)};
+const state={values:Array(81).fill(0),givens:new Set(),notes:Array.from({length:81},()=>new Set()),removed:Array.from({length:81},()=>new Set()),selected:0,mode:'value',auto:true,highlightSame:true,history:[],ocr:Array(81).fill(0),hintCells:new Set(),hintElims:new Set()};
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const rc=i=>[Math.floor(i/9),i%9], idx=(r,c)=>r*9+c, name=i=>{const [r,c]=rc(i);return `R${r+1}C${c+1}`};
 function peers(i){const [r,c]=rc(i),s=new Set();for(let k=0;k<9;k++){s.add(idx(r,k));s.add(idx(k,c))}const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3;for(let rr=br;rr<br+3;rr++)for(let cc=bc;cc<bc+3;cc++)s.add(idx(rr,cc));s.delete(i);return s}
-function cand(i){if(state.values[i])return [];const used=new Set([...peers(i)].map(j=>state.values[j]).filter(Boolean));return ALL.filter(n=>!used.has(n))}
-function snapshot(){state.history.push({values:[...state.values],givens:[...state.givens],notes:state.notes.map(s=>[...s])});if(state.history.length>40)state.history.shift()}
-function restore(x){state.values=[...x.values];state.givens=new Set(x.givens);state.notes=x.notes.map(a=>new Set(a));render()}
+function cand(i){if(state.values[i])return [];const used=new Set([...peers(i)].map(j=>state.values[j]).filter(Boolean));return ALL.filter(n=>!used.has(n)&&!state.removed[i].has(n))}
+function snapshot(){state.history.push({values:[...state.values],givens:[...state.givens],notes:state.notes.map(s=>[...s]),removed:state.removed.map(s=>[...s])});if(state.history.length>80)state.history.shift()}
+function restore(x){state.values=[...x.values];state.givens=new Set(x.givens);state.notes=x.notes.map(a=>new Set(a));state.removed=(x.removed||Array.from({length:81},()=>[])).map(a=>new Set(a));clearHintMark();render()}
 function hasConflict(i){const v=state.values[i];if(!v)return false;return [...peers(i)].some(j=>state.values[j]===v)}
 function render(){
  const b=$('#board');b.innerHTML='';
@@ -232,29 +233,29 @@ function render(){
    const d=document.createElement('button');d.type='button';d.className='cell';
    if(i===state.selected)d.classList.add('selected');else if(pset.has(i))d.classList.add('peer');
    if(state.highlightSame&&sv&&state.values[i]===sv)d.classList.add('same');
-   if(hasConflict(i))d.classList.add('conflict');
+   if(hasConflict(i))d.classList.add('conflict');if(state.hintCells.has(i))d.classList.add('hint-focus');
    if(state.givens.has(i))d.classList.add('given');else if(state.values[i])d.classList.add('user');
    if(state.values[i]){const x=document.createElement('div');x.className='big';x.textContent=state.values[i];d.appendChild(x)}
-   else{const cs=document.createElement('div');cs.className='cands';const arr=state.auto?cand(i):[...state.notes[i]];for(const n of ALL){const s=document.createElement('span');s.className='cand';s.textContent=arr.includes(n)?n:'';cs.appendChild(s)}d.appendChild(cs)}
+   else{const cs=document.createElement('div');cs.className='cands';const arr=state.auto?cand(i):[...state.notes[i]];for(const n of ALL){const s=document.createElement('span');s.className='cand';s.textContent=arr.includes(n)?n:'';if(state.hintElims.has(i+'-'+n))s.classList.add('hint-elim');cs.appendChild(s)}d.appendChild(cs)}
    d.addEventListener('click',()=>{state.selected=i;render()});b.appendChild(d);
  }
  $('#autoCandBtn').textContent='自动候选：'+(state.auto?'开':'关');$('#autoCandBtn').classList.toggle('active',state.auto);$('#autoToggle').classList.toggle('on',state.auto);$('#sameToggle').classList.toggle('on',state.highlightSame);
- try{localStorage.setItem('sudokuCoachV3',JSON.stringify({values:state.values,givens:[...state.givens],notes:state.notes.map(s=>[...s]),auto:state.auto,highlightSame:state.highlightSame}))}catch(e){}
+ try{localStorage.setItem('sudokuCoachV4',JSON.stringify({values:state.values,givens:[...state.givens],notes:state.notes.map(s=>[...s]),removed:state.removed.map(s=>[...s]),auto:state.auto,highlightSame:state.highlightSame}))}catch(e){}
 }
 function enter(n){
  const i=state.selected;if(state.givens.has(i))return;snapshot();
- if(state.mode==='value'){state.values[i]=state.values[i]===n?0:n;state.notes[i].clear()}
+ if(state.mode==='value'){state.values[i]=state.values[i]===n?0:n;state.notes[i].clear();state.removed=Array.from({length:81},()=>new Set());clearHintMark()}
  else if(!state.values[i]){state.notes[i].has(n)?state.notes[i].delete(n):state.notes[i].add(n)}
  render()
 }
-function erase(){const i=state.selected;if(state.givens.has(i))return;snapshot();state.values[i]=0;state.notes[i].clear();render()}
+function erase(){const i=state.selected;if(state.givens.has(i))return;snapshot();state.values[i]=0;state.notes[i].clear();state.removed=Array.from({length:81},()=>new Set());clearHintMark();render()}
 function loadSample(){
  const s='380000000067080053509300008978001346050763009603008570795632000842000635136800297';
- snapshot();state.values=[...s].map(Number);state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));state.notes=Array.from({length:81},()=>new Set());render()
+ snapshot();state.values=[...s].map(Number);state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));state.notes=Array.from({length:81},()=>new Set());state.removed=Array.from({length:81},()=>new Set());clearHintMark();render()
 }
 for(const n of ALL){const k=document.createElement('button');k.type='button';k.className='key';k.textContent=n;k.addEventListener('click',()=>enter(n));$('#keypad').appendChild(k)}
 $('#sampleBtn').onclick=loadSample;
-$('#clearBtn').onclick=()=>{snapshot();state.values.fill(0);state.givens.clear();state.notes=Array.from({length:81},()=>new Set());render()};
+$('#clearBtn').onclick=()=>{snapshot();state.values.fill(0);state.givens.clear();state.notes=Array.from({length:81},()=>new Set());state.removed=Array.from({length:81},()=>new Set());clearHintMark();render()};
 $('#undoBtn').onclick=()=>{const x=state.history.pop();if(x)restore(x)};
 $('#eraseBtn').onclick=erase;
 $('#valueModeBtn').onclick=()=>{state.mode='value';$('#valueModeBtn').classList.add('active');$('#candidateModeBtn').classList.remove('active')};
@@ -262,25 +263,130 @@ $('#candidateModeBtn').onclick=()=>{state.mode='note';$('#candidateModeBtn').cla
 $('#autoCandBtn').onclick=()=>{state.auto=!state.auto;render()};
 $('#autoToggle').onclick=()=>{state.auto=!state.auto;render()};
 $('#sameToggle').onclick=()=>{state.highlightSame=!state.highlightSame;render()};
-$('#checkBtn').onclick=()=>{const bad=state.values.some((v,i)=>v&&hasConflict(i));alert(bad?'存在行、列或宫冲突。':'当前没有直接冲突。')};
+$('#checkBtn').onclick=()=>{const bad=state.values.some((v,i)=>v&&hasConflict(i)),dead=state.values.some((v,i)=>!v&&cand(i).length===0);alert(bad?'存在行、列或宫冲突。':dead?'存在没有任何候选的空格，请检查此前输入或候选删除。':'当前盘面没有直接冲突。')};
 $('#copyBtn').onclick=()=>{const s=state.values.join('');prompt('复制下面的81位题目字符串：',s)};
-$('#resetBtn').onclick=()=>{localStorage.removeItem('sudokuCoachV3');location.reload()};
+$('#resetBtn').onclick=()=>{localStorage.removeItem('sudokuCoachV4');location.reload()};
 
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');$$('.page').forEach(x=>x.classList.remove('active'));$('#page-'+t.dataset.page).classList.add('active')});
 
-function units(){const out=[];for(let r=0;r<9;r++)out.push(ALL.map((_,c)=>idx(r,c)));for(let c=0;c<9;c++)out.push(ALL.map((_,r)=>idx(r,c)));for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++){const a=[];for(let r=br*3;r<br*3+3;r++)for(let c=bc*3;c<bc*3+3;c++)a.push(idx(r,c));out.push(a)}return out}
-function findStep(){
- // naked single
- for(let i=0;i<81;i++){const c=cand(i);if(!state.values[i]&&c.length===1)return{tech:'裸单',cells:[i],text:`${name(i)} 只有候选 ${c[0]}，因此确定为 ${c[0]}。`,short:'先找候选只剩一个的格。'}}
- // hidden single
- for(const u of units())for(const n of ALL){const ps=u.filter(i=>!state.values[i]&&cand(i).includes(n));if(ps.length===1)return{tech:'隐藏单数',cells:ps,text:`数字 ${n} 在当前单位中只剩 ${name(ps[0])} 可以放。`,short:`只盯数字 ${n}，检查某一行/列/宫是否只剩一个位置。`}}
- // locked candidate
- for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++){const box=[];for(let r=br*3;r<br*3+3;r++)for(let c=bc*3;c<bc*3+3;c++)box.push(idx(r,c));for(const n of ALL){const ps=box.filter(i=>!state.values[i]&&cand(i).includes(n));if(ps.length>=2){const rs=new Set(ps.map(i=>rc(i)[0])),cs=new Set(ps.map(i=>rc(i)[1]));if(rs.size===1){const r=[...rs][0],elim=ALL.map((_,c)=>idx(r,c)).filter(i=>!box.includes(i)&&!state.values[i]&&cand(i).includes(n));if(elim.length)return{tech:'锁定候选（指向）',cells:ps,elim,text:`宫内数字 ${n} 只落在第 ${r+1} 行，因此该行宫外的 ${n} 可删除。`,short:`在某一宫内找数字 ${n} 是否被锁在同一行。`}}if(cs.size===1){const c=[...cs][0],elim=ALL.map((_,r)=>idx(r,c)).filter(i=>!box.includes(i)&&!state.values[i]&&cand(i).includes(n));if(elim.length)return{tech:'锁定候选（指向）',cells:ps,elim,text:`宫内数字 ${n} 只落在第 ${c+1} 列，因此该列宫外的 ${n} 可删除。`,short:`在某一宫内找数字 ${n} 是否被锁在同一列。`}}}}}
- // naked pair
- for(const u of units()){const bis=u.filter(i=>!state.values[i]&&cand(i).length===2);for(let a=0;a<bis.length;a++)for(let b=a+1;b<bis.length;b++){const ca=cand(bis[a]).join(''),cb=cand(bis[b]).join('');if(ca===cb){const nums=cand(bis[a]),elim=u.filter(i=>i!==bis[a]&&i!==bis[b]&&!state.values[i]&&cand(i).some(n=>nums.includes(n)));if(elim.length)return{tech:'裸对',cells:[bis[a],bis[b]],elim,text:`${name(bis[a])} 与 ${name(bis[b])} 构成 {${nums.join(',')}} 裸对，因此同单位其他格可删除这两个候选。`,short:`找两个候选完全相同的双候选格。`}}}}
+
+function clearHintMark(){state.hintCells.clear();state.hintElims.clear()}
+function unitRows(){return Array.from({length:9},(_,r)=>ALL.map((_,c)=>idx(r,c)))}
+function unitCols(){return Array.from({length:9},(_,c)=>ALL.map((_,r)=>idx(r,c)))}
+function unitBoxes(){const out=[];for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++){const a=[];for(let r=br*3;r<br*3+3;r++)for(let c=bc*3;c<bc*3+3;c++)a.push(idx(r,c));out.push(a)}return out}
+function unitObjs(){return [...unitRows().map((cells,i)=>({type:'行',no:i+1,cells})),...unitCols().map((cells,i)=>({type:'列',no:i+1,cells})),...unitBoxes().map((cells,i)=>({type:'宫',no:i+1,cells}))]}
+function sees(a,b){return peers(a).has(b)}
+function comb(arr,k){const out=[];function f(s,cur){if(cur.length===k){out.push([...cur]);return}for(let i=s;i<arr.length;i++){cur.push(arr[i]);f(i+1,cur);cur.pop()}}f(0,[]);return out}
+function cm(){return Array.from({length:81},(_,i)=>new Set(cand(i)))}
+function exactPossible(forceI=-1,forceN=0){
+ const vals=[...state.values],removed=state.removed.map(s=>new Set(s));
+ if(forceI>=0){if(vals[forceI]&&vals[forceI]!==forceN)return false;if(!vals[forceI]&&!cand(forceI).includes(forceN))return false;vals[forceI]=forceN}
+ const rowUsed=Array.from({length:9},()=>new Set()),colUsed=Array.from({length:9},()=>new Set()),boxUsed=Array.from({length:9},()=>new Set());
+ for(let i=0;i<81;i++)if(vals[i]){const [r,c]=rc(i),b=Math.floor(r/3)*3+Math.floor(c/3),v=vals[i];if(rowUsed[r].has(v)||colUsed[c].has(v)||boxUsed[b].has(v))return false;rowUsed[r].add(v);colUsed[c].add(v);boxUsed[b].add(v)}
+ function rec(){
+   let bi=-1,bo=null;
+   for(let i=0;i<81;i++)if(!vals[i]){
+     const [r,c]=rc(i),b=Math.floor(r/3)*3+Math.floor(c/3),o=ALL.filter(n=>!rowUsed[r].has(n)&&!colUsed[c].has(n)&&!boxUsed[b].has(n)&&!removed[i].has(n));
+     if(!o.length)return false;if(bo===null||o.length<bo.length){bi=i;bo=o;if(o.length===1)break}
+   }
+   if(bi<0)return true;
+   const [r,c]=rc(bi),b=Math.floor(r/3)*3+Math.floor(c/3);
+   for(const n of bo){vals[bi]=n;rowUsed[r].add(n);colUsed[c].add(n);boxUsed[b].add(n);if(rec())return true;vals[bi]=0;rowUsed[r].delete(n);colUsed[c].delete(n);boxUsed[b].delete(n)}
+   return false
+ }
+ return rec()
+}
+function stepFill(tech,i,n,short,text,cells=[i]){return{tech,cells,fill:{i,n},elim:[],short,text}}
+function stepElim(tech,cells,elim,short,text){return{tech,cells,elim,short,text}}
+function strongLinks(n,C){
+ const out=[],seen=new Set();
+ for(const u of unitObjs()){const p=u.cells.filter(i=>!state.values[i]&&C[i].has(n));if(p.length===2){let [a,b]=p;if(a>b)[a,b]=[b,a];const k=a+'-'+b;if(!seen.has(k)){seen.add(k);out.push([a,b])}}}
+ return out
+}
+function validateStep(s){
+ if(!s)return null;
+ if(s.fill){if(!exactPossible(s.fill.i,s.fill.n))return null;return s}
+ if(s.elim?.length){const safe=s.elim.filter(e=>!exactPossible(e.i,e.n));if(!safe.length)return null;s.elim=safe;return s}
+ return s
+}
+function findPatternStep(){
+ if(state.values.some((v,i)=>v&&hasConflict(i)))return{tech:'盘面冲突',cells:[],elim:[],short:'先修正重复数字。',text:'当前行、列或宫存在重复数字，暂不能继续逻辑提示。'};
+ const C=cm();
+ // singles
+ for(let i=0;i<81;i++)if(!state.values[i]&&C[i].size===1){const n=[...C[i]][0];return stepFill('裸单',i,n,'找候选只剩一个的格。',`${name(i)} 只剩候选 ${n}，所以确定为 ${n}。`)}
+ for(const u of unitObjs())for(const n of ALL){const p=u.cells.filter(i=>!state.values[i]&&C[i].has(n));if(p.length===1)return stepFill('隐藏单数',p[0],n,`只盯数字 ${n}，检查${u.type}${u.no}。`,`${u.type}${u.no} 中数字 ${n} 只有 ${name(p[0])} 可以放，因此填入 ${n}。`)}
+ // locked candidates both directions
+ for(let b=0;b<9;b++)for(const n of ALL){const box=unitBoxes()[b],p=box.filter(i=>!state.values[i]&&C[i].has(n));if(p.length>=2){const rs=[...new Set(p.map(i=>rc(i)[0]))],cs=[...new Set(p.map(i=>rc(i)[1]))];if(rs.length===1){const r=rs[0],el=unitRows()[r].filter(i=>!box.includes(i)&&!state.values[i]&&C[i].has(n)).map(i=>({i,n}));if(el.length)return stepElim('锁定候选（指向）',p,el,`第${b+1}宫的 ${n} 被锁在第${r+1}行。`,`因此第${r+1}行、该宫外的候选 ${n} 可以删除。`)}if(cs.length===1){const c=cs[0],el=unitCols()[c].filter(i=>!box.includes(i)&&!state.values[i]&&C[i].has(n)).map(i=>({i,n}));if(el.length)return stepElim('锁定候选（指向）',p,el,`第${b+1}宫的 ${n} 被锁在第${c+1}列。`,`因此第${c+1}列、该宫外的候选 ${n} 可以删除。`)}}}
+ for(const u of [...unitObjs().slice(0,18)])for(const n of ALL){const p=u.cells.filter(i=>!state.values[i]&&C[i].has(n));if(p.length>=2){const bs=[...new Set(p.map(i=>{const [r,c]=rc(i);return Math.floor(r/3)*3+Math.floor(c/3)}))];if(bs.length===1){const b=bs[0],el=unitBoxes()[b].filter(i=>!u.cells.includes(i)&&!state.values[i]&&C[i].has(n)).map(i=>({i,n}));if(el.length)return stepElim('锁定候选（声明）',p,el,`${u.type}${u.no} 的 ${n} 全部落在第${b+1}宫。`,`因此第${b+1}宫其他格的候选 ${n} 可以删除。`)}}}
+ // naked subsets
+ for(const u of unitObjs()){const cells=u.cells.filter(i=>!state.values[i]&&C[i].size>=2&&C[i].size<=4);for(const k of [2,3,4])for(const g of comb(cells,k)){const un=new Set(g.flatMap(i=>[...C[i]]));if(un.size===k){const el=[];for(const j of u.cells)if(!g.includes(j)&&!state.values[j])for(const n of un)if(C[j].has(n))el.push({i:j,n});if(el.length){const nm=k===2?'裸对':k===3?'裸三数组':'裸四数组';return stepElim(nm,g,el,`${u.type}${u.no} 中 ${k} 个格只占用 ${k} 个候选。`,`这 ${k} 个数字必须由 ${g.map(name).join('、')} 占据，因此同单位其他格可删除 {${[...un].join(',')}}。`)}}}}
+ // hidden pair
+ for(const u of unitObjs())for(const [a,b] of comb(ALL,2)){const pa=u.cells.filter(i=>!state.values[i]&&C[i].has(a)),pb=u.cells.filter(i=>!state.values[i]&&C[i].has(b)),s=[...new Set([...pa,...pb])];if(pa.length===2&&pb.length===2&&s.length===2){const el=[];for(const i of s)for(const n of C[i])if(n!==a&&n!==b)el.push({i,n});if(el.length)return stepElim('隐藏数对',s,el,`${u.type}${u.no} 中 ${a}/${b} 都只出现在相同两个格。`,`因此 ${s.map(name).join('、')} 只能保留 ${a}/${b}。`)}}
+ function fish(size){
+   for(const n of ALL){
+     const rows=[...Array(9).keys()].filter(r=>{const cs=unitRows()[r].filter(i=>!state.values[i]&&C[i].has(n)).map(i=>rc(i)[1]);return cs.length>=2&&cs.length<=size});
+     for(const rs of comb(rows,size)){const cs=[...new Set(rs.flatMap(r=>unitRows()[r].filter(i=>!state.values[i]&&C[i].has(n)).map(i=>rc(i)[1])))];if(cs.length===size){const el=[];for(let r=0;r<9;r++)if(!rs.includes(r))for(const c of cs){const i=idx(r,c);if(!state.values[i]&&C[i].has(n))el.push({i,n})}if(el.length){const nm=size===2?'X-Wing':size===3?'Swordfish':'Jellyfish';return stepElim(nm,rs.flatMap(r=>cs.map(c=>idx(r,c))),el,`数字 ${n} 在 ${size} 行中只落在相同 ${size} 列。`,`形成 ${nm}，其他行这些列中的候选 ${n} 可以删除。`)}}}
+     const cols=[...Array(9).keys()].filter(c=>{const rs=unitCols()[c].filter(i=>!state.values[i]&&C[i].has(n)).map(i=>rc(i)[0]);return rs.length>=2&&rs.length<=size});
+     for(const cs of comb(cols,size)){const rs=[...new Set(cs.flatMap(c=>unitCols()[c].filter(i=>!state.values[i]&&C[i].has(n)).map(i=>rc(i)[0])))];if(rs.length===size){const el=[];for(let c=0;c<9;c++)if(!cs.includes(c))for(const r of rs){const i=idx(r,c);if(!state.values[i]&&C[i].has(n))el.push({i,n})}if(el.length){const nm=size===2?'X-Wing':size===3?'Swordfish':'Jellyfish';return stepElim(nm,cs.flatMap(c=>rs.map(r=>idx(r,c))),el,`数字 ${n} 在 ${size} 列中只落在相同 ${size} 行。`,`形成 ${nm}，其他列这些行中的候选 ${n} 可以删除。`)}}}
+   }
+   return null
+ }
+ let z=fish(2);if(z)return z;
+ // XY wing
+ const biv=[...Array(81).keys()].filter(i=>!state.values[i]&&C[i].size===2);
+ for(const p of biv){const ws=biv.filter(i=>i!==p&&sees(p,i));for(const a of ws)for(const b of ws)if(a<b&&!sees(a,b)){const ca=[...C[a]].filter(n=>C[p].has(n)),cb=[...C[b]].filter(n=>C[p].has(n));if(ca.length!==1||cb.length!==1||ca[0]===cb[0])continue;const za=[...C[a]].find(n=>!C[p].has(n)),zb=[...C[b]].find(n=>!C[p].has(n));if(za&&za===zb){const el=[...Array(81).keys()].filter(i=>!state.values[i]&&![p,a,b].includes(i)&&C[i].has(za)&&sees(i,a)&&sees(i,b)).map(i=>({i,n:za}));if(el.length)return stepElim('XY-Wing',[p,a,b],el,`${name(p)} 是枢轴，两侧双候选形成 XY-Wing。`,`两翼共同包含 ${za}；无论枢轴取哪个值，两翼至少一个为 ${za}，所以同时看见两翼的位置可删除 ${za}。`)}}}
+ // XYZ wing
+ const tri=[...Array(81).keys()].filter(i=>!state.values[i]&&C[i].size===3);
+ for(const p of tri){const ws=biv.filter(i=>sees(p,i)&&[...C[i]].every(n=>C[p].has(n)));for(const [a,b] of comb(ws,2)){const inter=[...C[a]].filter(n=>C[b].has(n)),un=new Set([...C[a],...C[b]]);if(inter.length===1&&un.size===3&&[...un].every(n=>C[p].has(n))){const n=inter[0],el=[...Array(81).keys()].filter(i=>!state.values[i]&&![p,a,b].includes(i)&&C[i].has(n)&&sees(i,p)&&sees(i,a)&&sees(i,b)).map(i=>({i,n}));if(el.length)return stepElim('XYZ-Wing',[p,a,b],el,`${name(p)} 与两个双候选翼形成 XYZ-Wing。`,`候选 ${n} 必在这三个关键格之一成立，因此同时看见三者的位置可删除 ${n}。`)}}}
+ // W-Wing
+ function sameSet(a,b){return a.size===b.size&&[...a].every(x=>b.has(x))}
+ for(const [a,b] of comb(biv,2)){if(!sameSet(C[a],C[b]))continue;const ns=[...C[a]];for(const bridge of ns){const other=ns.find(n=>n!==bridge);for(const [u,v] of strongLinks(bridge,C)){if((sees(a,u)&&sees(b,v))||(sees(a,v)&&sees(b,u))){const el=[...Array(81).keys()].filter(i=>!state.values[i]&&![a,b].includes(i)&&C[i].has(other)&&sees(i,a)&&sees(i,b)).map(i=>({i,n:other}));if(el.length)return stepElim('W-Wing',[a,b,u,v],el,`${name(a)} 与 ${name(b)} 是相同双候选，候选 ${bridge} 由一条强链连接两翼。`,`因此两翼至少一个必须取 ${other}，同时看见两翼的位置可删除 ${other}。`)}}}}
+ // Skyscraper
+ for(const n of ALL){
+   const R=[...Array(9).keys()].map(r=>unitRows()[r].filter(i=>!state.values[i]&&C[i].has(n))).filter(a=>a.length===2);
+   for(const [A,B] of comb(R,2)){const ac=A.map(i=>rc(i)[1]),bc=B.map(i=>rc(i)[1]),sh=ac.filter(c=>bc.includes(c));if(sh.length===1){const base=sh[0],ra=A.find(i=>rc(i)[1]!==base),rb=B.find(i=>rc(i)[1]!==base);if(ra!=null&&rb!=null&&!sees(ra,rb)){const el=[...Array(81).keys()].filter(i=>!state.values[i]&&C[i].has(n)&&![...A,...B].includes(i)&&sees(i,ra)&&sees(i,rb)).map(i=>({i,n}));if(el.length)return stepElim('Skyscraper',[...A,...B],el,`候选 ${n} 的两条行强链形成 Skyscraper。`,`两个“屋顶”至少一个为真，所以同时看见两个屋顶的位置可删除 ${n}。`)}}}
+   const Q=[...Array(9).keys()].map(c=>unitCols()[c].filter(i=>!state.values[i]&&C[i].has(n))).filter(a=>a.length===2);
+   for(const [A,B] of comb(Q,2)){const ar=A.map(i=>rc(i)[0]),br=B.map(i=>rc(i)[0]),sh=ar.filter(r=>br.includes(r));if(sh.length===1){const base=sh[0],ra=A.find(i=>rc(i)[0]!==base),rb=B.find(i=>rc(i)[0]!==base);if(ra!=null&&rb!=null&&!sees(ra,rb)){const el=[...Array(81).keys()].filter(i=>!state.values[i]&&C[i].has(n)&&![...A,...B].includes(i)&&sees(i,ra)&&sees(i,rb)).map(i=>({i,n}));if(el.length)return stepElim('Skyscraper',[...A,...B],el,`候选 ${n} 的两条列强链形成 Skyscraper。`,`两个“屋顶”至少一个为真，所以同时看见两个屋顶的位置可删除 ${n}。`)}}}
+ }
+ // 2-string kite
+ for(const n of ALL){const R=[...Array(9).keys()].map(r=>unitRows()[r].filter(i=>!state.values[i]&&C[i].has(n))).filter(a=>a.length===2),Q=[...Array(9).keys()].map(c=>unitCols()[c].filter(i=>!state.values[i]&&C[i].has(n))).filter(a=>a.length===2);for(const A of R)for(const B of Q)for(const a of A)for(const b of B){const [ar,ac]=rc(a),[br,bc]=rc(b);if(Math.floor(ar/3)===Math.floor(br/3)&&Math.floor(ac/3)===Math.floor(bc/3)){const ao=A.find(x=>x!==a),bo=B.find(x=>x!==b);const el=[...Array(81).keys()].filter(i=>!state.values[i]&&C[i].has(n)&&![...A,...B].includes(i)&&sees(i,ao)&&sees(i,bo)).map(i=>({i,n}));if(el.length)return stepElim('2-String Kite',[...A,...B],el,`候选 ${n} 的一条行强链和一条列强链在同一宫连接。`,`两条强链外端至少一个为真，同时看见外端的位置可删除 ${n}。`)}}}
+ z=fish(3);if(z)return z;z=fish(4);if(z)return z;
  return null
 }
-$$('[data-hint]').forEach(btn=>btn.onclick=()=>{const step=findStep();const lv=+btn.dataset.hint;if(!step){$('#hintBox').textContent='当前基础引擎没有找到可直接推进的步骤。后续版本会继续增加 Wing/AIC 等更高阶链式技巧。';return}$('#hintBox').innerHTML=lv===1?`<b>${step.tech}</b><br>${step.short}`:lv===2?`<b>${step.tech}</b><br>关键位置：${step.cells.map(name).join('、')}${step.elim?'<br>关注可删除位置：'+step.elim.map(name).join('、'):''}`:`<b>${step.tech}</b><br>${step.text}`});
+function forcingStep(){
+ // Prefer bivalue / low-candidate cells and prove impossible candidates.
+ const cells=[...Array(81).keys()].filter(i=>!state.values[i]&&cand(i).length>=2).sort((a,b)=>cand(a).length-cand(b).length);
+ for(const i of cells.slice(0,30)){
+   const cs=cand(i),bad=[];
+   for(const n of cs)if(!exactPossible(i,n))bad.push(n);
+   if(bad.length===cs.length-1){const good=cs.find(n=>!bad.includes(n));return stepFill('矛盾链',i,good,`对 ${name(i)} 的候选逐一作“假设—验证”。`,`若假设 ${name(i)} 为 ${bad.join(' 或 ')}，继续推演都会导致盘面无解；因此 ${name(i)} 只能是 ${good}。`,[i])}
+   if(bad.length){const n=bad[0];return stepElim('矛盾链',[i],[{i,n}],`假设 ${name(i)}=${n}，检查是否会产生矛盾。`,`假设 ${name(i)}=${n} 后，沿现有约束继续推演会出现无解矛盾，因此可以排除候选 ${n}。`)}
+ }
+ return null
+}
+function findStep(){
+ let s=findPatternStep();
+ if(s){const v=validateStep(s);if(v)return v}
+ return forcingStep()
+}
+let currentHint=null;
+function markStep(s){clearHintMark();for(const i of s?.cells||[])state.hintCells.add(i);for(const e of s?.elim||[])state.hintElims.add(e.i+'-'+e.n);render()}
+$$('[data-hint]').forEach(btn=>btn.onclick=()=>{
+ currentHint=findStep();const lv=+btn.dataset.hint;
+ if(!currentHint){$('#hintBox').textContent=state.values.every(Boolean)?'这道数独已经完成。':'当前没有找到可推进步骤，请检查盘面是否录入正确。';clearHintMark();render();return}
+ markStep(currentHint);
+ const s=currentHint,pos=(s.cells||[]).map(name).join('、'),del=(s.elim||[]).map(e=>`${name(e.i)} 的 ${e.n}`).join('、');
+ $('#hintBox').innerHTML=lv===1?`<b>${s.tech}</b><br>${s.short}`:lv===2?`<b>${s.tech}</b><br>关键位置：${pos||'—'}${del?'<br>可删除：'+del:''}${s.fill?'<br>可确定：'+name(s.fill.i)+' = '+s.fill.n:''}`:`<b>${s.tech}</b><br>${s.text}`;
+});
+$('#applyHintBtn').onclick=()=>{
+ const s=currentHint||findStep();if(!s){$('#hintBox').textContent='当前没有可执行步骤。';return}
+ snapshot();
+ if(s.fill&&!state.givens.has(s.fill.i)){state.values[s.fill.i]=s.fill.n;state.notes[s.fill.i].clear();state.removed[s.fill.i].clear()}
+ for(const e of s.elim||[])if(!state.values[e.i])state.removed[e.i].add(e.n);
+ currentHint=null;clearHintMark();render();
+ $('#hintBox').innerHTML=`<b>已执行：${s.tech}</b><br>${s.fill?name(s.fill.i)+' = '+s.fill.n:(s.elim||[]).map(e=>name(e.i)+' 删除 '+e.n).join('、')}`;
+};
+
 
 let photoImage=null, photoRotation=0, photoCorners=[], reviewConfidence=Array(81).fill(0);
 const photoCanvas=$('#photoCanvas'), photoCtx=photoCanvas.getContext('2d',{willReadFrequently:true});
@@ -332,66 +438,93 @@ function warpBoard(size=720){
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){const den=H[6]*x+H[7]*y+H[8],u=(H[0]*x+H[1]*y+H[2])/den,v=(H[3]*x+H[4]*y+H[5])/den,xi=Math.round(u),yi=Math.round(v),di=(y*size+x)*4;if(xi>=0&&xi<sw&&yi>=0&&yi<sh){const si=(yi*sw+xi)*4;dd[di]=sd[si];dd[di+1]=sd[si+1];dd[di+2]=sd[si+2];dd[di+3]=255}else{dd[di]=dd[di+1]=dd[di+2]=255;dd[di+3]=255}}
   oc.putImageData(dst,0,0);return out
 }
-function largestComponent(bin,w,h){
-  const seen=new Uint8Array(w*h);let best=null;const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
-  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){const st=y*w+x;if(!bin[st]||seen[st])continue;let stack=[st],area=0,minx=x,maxx=x,miny=y,maxy=y;seen[st]=1;
-    while(stack.length){const q=stack.pop(),qy=Math.floor(q/w),qx=q-qy*w;area++;if(qx<minx)minx=qx;if(qx>maxx)maxx=qx;if(qy<miny)miny=qy;if(qy>maxy)maxy=qy;for(const [dx,dy] of dirs){const nx=qx+dx,ny=qy+dy,ni=ny*w+nx;if(nx>0&&nx<w-1&&ny>0&&ny<h-1&&bin[ni]&&!seen[ni]){seen[ni]=1;stack.push(ni)}}}
-    if(!best||area>best.area)best={area,minx,maxx,miny,maxy}
-  }return best
+
+function cellGlyph(board,r,c){
+  const S=board.width,cell=S/9,pad=cell*.16,N=112;
+  const cv=document.createElement('canvas');cv.width=cv.height=N;const cx=cv.getContext('2d',{willReadFrequently:true});
+  cx.drawImage(board,c*cell+pad,r*cell+pad,cell*(1-2*pad),cell*(1-2*pad),0,0,N,N);
+  const im=cx.getImageData(0,0,N,N),d=im.data,gray=new Float32Array(N*N);
+  let mean=0;for(let p=0,k=0;p<gray.length;p++,k+=4){gray[p]=.299*d[k]+.587*d[k+1]+.114*d[k+2];mean+=gray[p]}mean/=gray.length;
+  const th=Math.max(55,Math.min(220,mean-38)),bin=new Uint8Array(N*N);
+  for(let p=0;p<bin.length;p++)bin[p]=gray[p]<th?1:0;
+  const seen=new Uint8Array(N*N),dirs=[[1,0],[-1,0],[0,1],[0,-1]],opts=[];
+  for(let y=2;y<N-2;y++)for(let x=2;x<N-2;x++){const st=y*N+x;if(!bin[st]||seen[st])continue;let stack=[st],pix=[],minx=x,maxx=x,miny=y,maxy=y;seen[st]=1;
+    while(stack.length){const q=stack.pop(),qy=Math.floor(q/N),qx=q-qy*N;pix.push(q);if(qx<minx)minx=qx;if(qx>maxx)maxx=qx;if(qy<miny)miny=qy;if(qy>maxy)maxy=qy;for(const [dx,dy] of dirs){const nx=qx+dx,ny=qy+dy,ni=ny*N+nx;if(nx>=2&&nx<N-2&&ny>=2&&ny<N-2&&bin[ni]&&!seen[ni]){seen[ni]=1;stack.push(ni)}}}
+    const bw=maxx-minx+1,bh=maxy-miny+1,area=pix.length,ar=area/(N*N);let sx=0,sy=0;for(const q of pix){const qy=Math.floor(q/N),qx=q-qy*N;sx+=qx;sy+=qy}const ccx=sx/area,ccy=sy/area;
+    const sizeOK=bh>=N*.35&&bh<=N*.83&&bw>=N*.05&&bw<=N*.68&&ar>=.012&&ar<=.20;
+    const centerOK=ccx>=N*.17&&ccx<=N*.83&&ccy>=N*.15&&ccy<=N*.85;
+    if(sizeOK&&centerOK)opts.push({pix,minx,maxx,miny,maxy,bw,bh,area,score:bh/N*60+ar*180})
+  }
+  if(!opts.length)return{isMain:false};
+  opts.sort((a,b)=>b.score-a.score);const o=opts[0],tmp=document.createElement('canvas');tmp.width=o.bw;tmp.height=o.bh;const tx=tmp.getContext('2d');
+  tx.fillStyle='#fff';tx.fillRect(0,0,o.bw,o.bh);tx.fillStyle='#000';for(const q of o.pix){const qy=Math.floor(q/N),qx=q-qy*N;tx.fillRect(qx-o.minx,qy-o.miny,1,1)}
+  const out=document.createElement('canvas');out.width=out.height=100;const ox=out.getContext('2d');ox.fillStyle='#fff';ox.fillRect(0,0,100,100);
+  const scale=Math.min(60/o.bw,70/o.bh),dw=Math.max(1,Math.round(o.bw*scale)),dh=Math.max(1,Math.round(o.bh*scale));ox.imageSmoothingEnabled=false;ox.drawImage(tmp,0,0,o.bw,o.bh,Math.round((100-dw)/2),Math.round((100-dh)/2),dw,dh);
+  return{isMain:true,canvas:out,score:Math.min(100,Math.round(o.score))}
 }
-function analyzeCell(board,r,c){
-  const S=board.width,cell=S/9,pad=cell*.19,x=c*cell+pad,y=r*cell+pad,ww=cell-2*pad,hh=cell-2*pad,N=96;
-  const cv=document.createElement('canvas');cv.width=cv.height=N;const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(board,x,y,ww,hh,0,0,N,N);
-  const im=cx.getImageData(0,0,N,N),d=im.data;let mean=0;for(let k=0;k<d.length;k+=4)mean+=.299*d[k]+.587*d[k+1]+.114*d[k+2];mean/=N*N;const th=Math.max(75,Math.min(205,mean-34));const bin=new Uint8Array(N*N);
-  for(let p=0,k=0;p<bin.length;p++,k+=4){const g=.299*d[k]+.587*d[k+1]+.114*d[k+2],dark=g<th;bin[p]=dark?1:0;const v=dark?0:255;d[k]=d[k+1]=d[k+2]=v;d[k+3]=255}
-  cx.putImageData(im,0,0);const comp=largestComponent(bin,N,N);
-  if(!comp)return{canvas:cv,isMain:false,score:0};
-  const bw=comp.maxx-comp.minx+1,bh=comp.maxy-comp.miny+1,centerX=(comp.minx+comp.maxx+1)/(2*N),centerY=(comp.miny+comp.maxy+1)/(2*N),areaRatio=comp.area/(N*N);
-  // 主数字通常明显大于候选备注，并位于格子中部。窄的“1”也允许，所以宽度阈值较低。
-  const sizeOK=bh>=N*.40 && bw>=N*.07 && areaRatio>=.018;
-  const centerOK=centerX>=.16&&centerX<=.84&&centerY>=.18&&centerY<=.82;
-  const isMain=sizeOK&&centerOK;
-  const score=Math.min(100,Math.round((bh/N)*70+(areaRatio*300)));
-  return{canvas:cv,isMain,score,metrics:{bw,bh,areaRatio,centerX,centerY}}
+const DIGIT_PROTOTYPES={"1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT3c/+8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABM5////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANuv/////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFNsT///////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAANZfk/////////wAAAAAAAAAAAAAAAAAAAAAAAAAAAADq/////6N1+v//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAPr/+tlpBCn5//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAcpVfGAEAKfn//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp+f//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn5//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKfn//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp+f//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn5//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKfn//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp+f//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn5//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKfn//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp+f//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn5//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKfn//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp+f//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn5//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKfn//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp+f//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn5//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKfn//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp+f//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn5//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKfn//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa7///AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","2":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABhFn+X/7KtcJQMAAAAAAAAAAAAAAAAAAAAAAAAAAAJD2//////////ucxAAAAAAAAAAAAAAAAAAAAAAAAAonPb////////////8tzsGAAAAAAAAAAAAAAAAAAAAC77///7mg0ZBQVXC+///5SIAAAAAAAAAAAAAAAAAAAmf/f/9kh4AAAAAABB03/39iA0AAAAAAAAAAAAAAAAAZf3//40EAAAAAAAAAAB09P/4RAQAAAAAAAAAAAAAAADe///PEQAAAAAAAAAAABPN/v+WEAAAAAAAAAAAAAAAAGvH1zsAAAAAAAAAAAAAAI34/8MTAAAAAAAAAAAAAAAAAAkSAAAAAAAAAAAAAAAAV+7/0BMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB49//NEwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABLf9/6sTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABG5///ZAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAApX5/78YAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFy8//3TQMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFjfj//6YOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHsL9//6pDwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUnY///9kRUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaF8P//+3QMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAZr/7//+lYAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAABWN7///6uIgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADju////nhAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFg8///1j4BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOvD//+U5AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACj///TKwEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKez//j4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABu/v/bEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa7//5kEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABsP//3Xt1dXV1dXV1dXV1dXFOBQAAAAAAAAAAAAAAAAGw//////////////////////8iAAAAAAAAAAAAAAAAAaX//////////////////////yIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","3":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABzF+0/j1040wCgAAAAAAAAAAAAAAAAAAAAAAAAAAACCn+////////++nNQEAAAAAAAAAAAAAAAAAAAAAAAR+6f////////////7lbw4AAAAAAAAAAAAAAAAAAAAAbP7//++TRzIyTKfs///oXQIAAAAAAAAAAAAAAAAAAABJ5/mJLgEAAAAAB0ay+v+zLQAAAAAAAAAAAAAAAAAAAAEnOwQAAAAAAAAAADnK/+pkBQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIz9/50XAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAW/r/qh8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABw/P+mGgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACKj//o0KAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABF55f/YRgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAErsPr//44HAAAAAAAAAAAAAAAAAAAAAAAAAAQ5f6bD5P7///eOKAAAAAAAAAAAAAAAAAAAAAAAAAAANfb////////1eAQAAAAAAAAAAAAAAAAAAAAAAAAAAABA/f////////mRBwAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ7bHCc3ff////AQgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEWOpj4//2vHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB1vV//mJGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGD5/+dCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJ8z//2MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFlf//ZwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACF//9nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC57//2cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAs1v//ZQAAAAAAAAAAAAAAAAAABEY0AAAAAAAAAAAAA3f8/9dDAAAAAAAAAAAAAAAAAACA9+9OBAAAAAAAAAJTzv/8jRoAAAAAAAAAAAAAAAAAANX///i5IwAAAAAqnvH//6koAAAAAAAAAAAAAAAAAAAAIsD8////58PD2vv////TTAEAAAAAAAAAAAAAAAAAAAAAC3Dg///////////uoCIBAAAAAAAAAAAAAAAAAAAAAAAAAB+S1P////7lqkoOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","4":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAmnz+q4MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAq7v//2hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABZf////bEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAF9/f///9sQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANu//////2xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAi7///////bEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABfv//5pn4/9sQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC7v//yBT/b/2xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaxv//twhO9v/bEAAAAAAAAAAAAAAAAAAAAAAAAAAAAnj//+IbAE72/9sQAAAAAAAAAAAAAAAAAAAAAAAAAAA/7///XwEATvb/2xAAAAAAAAAAAAAAAAAAAAAAAAAAFeD//7UOAABO9v/bEAAAAAAAAAAAAAAAAAAAAAAAAACi///nHQAAAE72/9sQAAAAAAAAAAAAAAAAAAAAAAAAOu//9FMBAAAATvb/2xAAAAAAAAAAAAAAAAAAAAAAABfW//+rBQAAAABO9v/bEAAAAAAAAAAAAAAAAAAAAAAHvv//3BwAAAAAAE72/9sQAAAAAAAAAAAAAAAAAAAAAFP+//lNAAAAAAAATvb/2xAAAAAAAAAAAAAAAAAAAAAXz///iAIAAAAAAABO9v/bEAAAAAAAAAAAAAAAAAAABqP///IZAAAAAAAAAFD2/98VAAAAAAAAAAAAAAAAAABw+///5HBlZWVlZWVtvPv//JpmZWVlUQMAAAAAAAAAAOr////////////////////////////7DwAAAAAAAAAA8P////////////////////////////wQAAAAAAAAAAAzYWJiYmJiYmJiYmJlrfz/9IZiYmJiVwkAAAAAAAAAAAAAAAAAAAAAAAAAAABO9v/cEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE72/9sQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATvb/2xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABO9v/bEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE72/9sQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATvb/2xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA49P/UDwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","5":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAID3/////////////////pUDAAAAAAAAAAAAAAAAAAAAt///////////////////zgsAAAAAAAAAAAAAAAAAAADM///fwcDAwMDAwMDAwLtuBAAAAAAAAAAAAAAAAAAAANX/+TcBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG2f/pFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABfk/98MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL/P/2wsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA9+f/VCgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD75/88HAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAZv3/ugIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACG//+yAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJr//64pbrLIycm/jUUHAAAAAAAAAAAAAAAAAAAAAAAApv///v///////////7MsAgAAAAAAAAAAAAAAAAAAAAS0///////73MfW/f////FnAAAAAAAAAAAAAAAAAAAADc/////peSsTCBAmbOj//+otAAAAAAAAAAAAAAAAAAACduX3qAgAAAAAAAAADsL//84UAAAAAAAAAAAAAAAAAAAAHjkKAAAAAAAAAAAAMuP//XkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABcf//0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAc9P/5AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADD//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMD//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAxf//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABHw//8AAAAAAAAAAAAAAAAAABoUAAAAAAAAAAAAAAAAbf//2gAAAAAAAAAAAAAAAABZ874XAAAAAAAAAAAAABvh//+RAAAAAAAAAAAAAAAAAOX//sxNAwAAAAAAAAAatv7/0CYAAAAAAAAAAAAAAAAAY/j///igKgAAAAABVdz///I1AAAAAAAAAAAAAAAAAAADZeH8///8y6yVtNX+///skwAAAAAAAAAAAAAAAAAAAAAAIZzq////////////vykAAAAAAAAAAAAAAAAAAAAAAAAAAzWj0vn////9umkMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","6":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIJm7L9fvYmkIbAAAAAAAAAAAAAAAAAAAAAAAAAAACFpHx/////////+VxJQAAAAAAAAAAAAAAAAAAAAAABmfg/f////////////7sbQAAAAAAAAAAAAAAAAAAAAM/4//+76E6JCMmS6rw//6aAgAAAAAAAAAAAAAAAAADPt3/+pYwBQAAAAAABS1pjCAAAAAAAAAAAAAAAAAAABCi//u0DQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABOuj8uhAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA6C/vZoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJdT+3C4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARM/f2hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADYj/82QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATt//kNQAAAiFPZG1tVSEAAAAAAAAAAAAAAAAAAAAAABrl/9kJCzjE/////////tNwDAAAAAAAAAAAAAAAAAAAHO//yRCQ9/////////////+2JAAAAAAAAAAAAAAAAAAj+//nvvj//9+AMCU5hM////7XGgAAAAAAAAAAAAAAAC7//////+9dAQAAAAAAAmLt//+kBgAAAAAAAAAAAAAAK//////rWwMAAAAAAAAAAU73//pbAAAAAAAAAAAAAAAi9///+JACAAAAAAAAAAAABbb//9UAAAAAAAAAAAAAABru///1RgAAAAAAAAAAAAAALf7/8wAAAAAAAAAAAAAAF9r//+AzAAAAAAAAAAAAAAAN4P//AAAAAAAAAAAAAAASqv//1RwAAAAAAAAAAAAAAAKy//8AAAAAAAAAAAAAAAuA///aJwAAAAAAAAAAAAAABM3//wAAAAAAAAAAAAAAAkH2/+s8AAAAAAAAAAAAAAAa+f/9AAAAAAAAAAAAAAAAG8f/9lQAAAAAAAAAAAAAAFz+/+gAAAAAAAAAAAAAAAAFWfn9wRkAAAAAAAAAAAAY6P/+kAAAAAAAAAAAAAAAAAAd0v/2oRQAAAAAAAAAE4r+/94sAAAAAAAAAAAAAAAAAAdV9v//zFoMAAAAAlvb/f/2SQEAAAAAAAAAAAAAAAAAAAln7////+W5ub/p////85QDAAAAAAAAAAAAAAAAAAAAAAVOzf7//////////s88AwAAAAAAAAAAAAAAAAAAAAAAAAIZfMX7////+8FtFgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","7":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC5/v/////////////////////+xAAAAAAAAAAAAAAAAP/////////////////////////XAAAAAAAAAAAAAAAAxP7//////////////////////9cAAAAAAAAAAAAAAAAABwoKCgoKCgoKCgoKCgs17v//wQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAnX8//NhAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAr2v/6ogwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYf+/9ojAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAe1f/7kQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB4f+/+k/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABF9v/9igAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB7H//soiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABO+P/yVwEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACLP//78QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJf+P/4VQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADs7//8EPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF///jMwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJO///5oDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWC///fJwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALez//oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOZ///dKgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARfb/+H8BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAnT///YEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU/z/91AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAe9//+7BgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABYPz/8lYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACXg//+qBQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABnP7/8zoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn5//6EAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABi///3xIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABLb//+JAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","8":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARxWjc3257pxMgYAAAAAAAAAAAAAAAAAAAAAAAAAABNm1fz////////6nSwBAAAAAAAAAAAAAAAAAAAAAAAoxvn/////8Pn/////7nMAAAAAAAAAAAAAAAAAAAAAJtL///fCXyYhIziT5////HACAAAAAAAAAAAAAAAAAAGl+P/jYQ0BAAAAAAAtr/7/8jQAAAAAAAAAAAAAAAAAH9b++GMEAAAAAAAAAAAZyP//bgAAAAAAAAAAAAAAAABW9/+fBwAAAAAAAAAAAAA09f/GCgAAAAAAAAAAAAAAAIj3/3IHAAAAAAAAAAAAAADs/+gXAAAAAAAAAAAAAAAAlvf/cgcAAAAAAAAAAAAAAOz/6RgAAAAAAAAAAAAAAABu9/95BwAAAAAAAAAAAAAL7v/HCgAAAAAAAAAAAAAAADLm/80nAQAAAAAAAAAAA3P7/5QBAAAAAAAAAAAAAAAAA7v8/8YgAAAAAAAAAARe8f//SQAAAAAAAAAAAAAAAAAATuP//+ZxJBkUFxs2rP///qYHAAAAAAAAAAAAAAAAAAAAQOD+///16d/l7fz///+YDAAAAAAAAAAAAAAAAAAAAAABZPX/////////////zRAAAAAAAAAAAAAAAAAAAAAAAjrN/P/////////////8gg8AAAAAAAAAAAAAAAAAAAB16P7/9rODUklKZpfa///+wR8AAAAAAAAAAAAAAAAAP+T+/rxDBwAAAAAAARd+8f//lgUAAAAAAAAAAAAAABbS//+SBwAAAAAAAAAAAAAb7///aAAAAAAAAAAAAAAAbvT/6DIBAAAAAAAAAAAAAACW///cAAAAAAAAAAAAAAC//v+UAgAAAAAAAAAAAAAAABr5//8AAAAAAAAAAAAAAN3//4AAAAAAAAAAAAAAAAAAC93//wAAAAAAAAAAAAAA3P//hAAAAAAAAAAAAAAAAAAN7P//AAAAAAAAAAAAAAC6//+oBwAAAAAAAAAAAAAAADX9//8AAAAAAAAAAAAAAFjy//tbBAAAAAAAAAAAAAAC3P//ygAAAAAAAAAAAAAAEcT9/700AgAAAAAAAAAAEHH5//VaAAAAAAAAAAAAAAAAJdP9/vGvKQIAAAAABXLh+///dQMAAAAAAAAAAAAAAAAAWtz9///93MPAvsz4////9rMYAAAAAAAAAAAAAAAAAAAAHIrk////////////+84/BgAAAAAAAAAAAAAAAAAAAAAAAieGxvb/////3qdNDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","9":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAs4g9j18NB9PQoAAAAAAAAAAAAAAAAAAAAAAAAAAAA+u/z////////+sDQAAAAAAAAAAAAAAAAAAAAAAAAIpPH/////////////7nkBAAAAAAAAAAAAAAAAAAAAAZn////iiDwoKDia6////XIAAAAAAAAAAAAAAAAAAABb9P/1fB8AAAAAAAEonf//7isAAAAAAAAAAAAAAAAAE9r//5wEAAAAAAAAAAAQsv//hQAAAAAAAAAAAAAAAAB9///oJAAAAAAAAAAAAAAW7v/yKAAAAAAAAAAAAAAAAL///5oAAAAAAAAAAAAAAAHi//+DAAAAAAAAAAAAAAAA7///ZQAAAAAAAAAAAAAAAJv//9kAAAAAAAAAAAAAAAD///5bAAAAAAAAAAAAAAAAf////wAAAAAAAAAAAAAAAO///18AAAAAAAAAAAAAAACR////AAAAAAAAAAAAAAAA0///fQAAAAAAAAAAAAAAANT///8AAAAAAAAAAAAAAACH///kGQAAAAAAAAAAAAAX7v///wAAAAAAAAAAAAAAACDs//9zAAAAAAAAAAAAAXX+////AAAAAAAAAAAAAAAAAnT7/+xnAwAAAAAAAAB59f////8AAAAAAAAAAAAAAAAAA73///+mNA8AARBKtPv//fD//wAAAAAAAAAAAAAAAAAAKsP////007a40vf///tnXP//AAAAAAAAAAAAAAAAAAAAEIX8///////////YSgN2//8AAAAAAAAAAAAAAAAAAAAAAANasMfZ2cSWMgAAAJb//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADyv//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABr9/9EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAc///hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATS//kpAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL/b/rgQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACXg//g3AAAAAAAAAAAAAAAAAAAAIDoSAAAAAAAAAAANtP//xAsAAAAAAAAAAAAAAAAAABfT99qBBgAAAAANkN/9/8wUAAAAAAAAAAAAAAAAAAAANe/////0xLq6w/T////lGwAAAAAAAAAAAAAAAAAAAAABOK/x///////////5kycAAAAAAAAAAAAAAAAAAAAAAAAABTeYzv/////0o0oEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="},_pc={};
+function protoArr(d){if(_pc[d])return _pc[d];const raw=atob(DIGIT_PROTOTYPES[d]),a=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)a[i]=raw.charCodeAt(i);return _pc[d]=a}
+function glyphVector(canvas){
+ const ctx=canvas.getContext('2d',{willReadFrequently:true}),W=canvas.width,H=canvas.height,im=ctx.getImageData(0,0,W,H).data;
+ let minx=W,miny=H,maxx=-1,maxy=-1;const mask=new Uint8Array(W*H);
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const k=(y*W+x)*4,g=.299*im[k]+.587*im[k+1]+.114*im[k+2];if(g<128){mask[y*W+x]=1;if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y}}
+ if(maxx<0)return null;
+ const tmp=document.createElement('canvas');tmp.width=maxx-minx+1;tmp.height=maxy-miny+1;const tx=tmp.getContext('2d');tx.fillStyle='#fff';tx.fillRect(0,0,tmp.width,tmp.height);tx.fillStyle='#000';
+ for(let y=miny;y<=maxy;y++)for(let x=minx;x<=maxx;x++)if(mask[y*W+x])tx.fillRect(x-minx,y-miny,1,1);
+ const out=document.createElement('canvas');out.width=out.height=32;const oc=out.getContext('2d');oc.fillStyle='#fff';oc.fillRect(0,0,32,32);
+ const scale=Math.min(24/tmp.width,30/tmp.height),dw=Math.max(1,Math.round(tmp.width*scale)),dh=Math.max(1,Math.round(tmp.height*scale));oc.imageSmoothingEnabled=true;oc.drawImage(tmp,0,0,tmp.width,tmp.height,Math.round((32-dw)/2),Math.round((32-dh)/2),dw,dh);
+ const od=oc.getImageData(0,0,32,32).data,a=new Uint8Array(1024);for(let i=0;i<1024;i++)a[i]=255-od[i*4];return a
 }
-function buildContactSheet(board){
-  const tile=108,gap=10,sheet=document.createElement('canvas');sheet.width=sheet.height=tile*9;const sc=sheet.getContext('2d',{willReadFrequently:true});sc.fillStyle='#fff';sc.fillRect(0,0,sheet.width,sheet.height);
-  const accepted=Array(81).fill(false),scores=Array(81).fill(0);let count=0;
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){const a=analyzeCell(board,r,c),i=idx(r,c);scores[i]=a.score;if(a.isMain){accepted[i]=true;count++;sc.drawImage(a.canvas,c*tile+gap,r*tile+gap,tile-2*gap,tile-2*gap)}}
-  return{sheet,tile,accepted,scores,count}
+function templateDigit(canvas){
+ const a=glyphVector(canvas);if(!a)return{value:0,confidence:0};const scores=[];
+ for(let d=1;d<=9;d++){const p=protoArr(String(d));let mse=0;for(let i=0;i<1024;i++){const z=(a[i]-p[i])/255;mse+=z*z}scores.push([d,mse/1024])}
+ scores.sort((x,y)=>x[1]-y[1]);const margin=scores[1][1]-scores[0][1],ok=scores[0][1]<.08&&margin>.025;
+ return{value:ok?scores[0][0]:0,confidence:ok?Math.min(99,Math.round(75+margin*180)):0,best:scores[0][1],margin}
 }
 async function loadTesseract(){
  if(window.Tesseract)return;
- await new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';sc.onload=res;sc.onerror=()=>rej(new Error('OCR组件加载失败'));document.head.appendChild(sc)})
+ await new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';sc.onload=res;sc.onerror=()=>rej(new Error('OCR组件加载失败，请检查网络'));document.head.appendChild(sc)})
 }
 function progress(p,s){$('#ocrBar').style.width=p+'%';$('#ocrPct').textContent=Math.round(p)+'%';$('#ocrStage').textContent=s}
-function parseBoxes(data,tile,accepted,scores){
-  const vals=Array(81).fill(0),conf=Array(81).fill(0),items=[];
-  if(data.tsv){for(const line of data.tsv.trim().split(/\n/).slice(1)){const p=line.split('\t');if(p.length<12)continue;const text=(p.slice(11).join('\t')||'').replace(/[^1-9]/g,'');if(!text)continue;items.push({n:+text[0],left:+p[6],top:+p[7],width:+p[8],height:+p[9],cf:+p[10]})}}
-  if(!items.length&&data.words){for(const w of data.words||[]){const text=(w.text||'').replace(/[^1-9]/g,'');if(text&&w.bbox)items.push({n:+text[0],left:w.bbox.x0,top:w.bbox.y0,width:w.bbox.x1-w.bbox.x0,height:w.bbox.y1-w.bbox.y0,cf:w.confidence||0})}}
-  for(const it of items){const c=Math.floor((it.left+it.width/2)/tile),r=Math.floor((it.top+it.height/2)/tile);if(r<0||r>8||c<0||c>8)continue;const i=idx(r,c);if(!accepted[i])continue;if(it.n>=1&&it.n<=9&&it.cf>=25){vals[i]=it.n;conf[i]=Math.min(100,Math.round((it.cf+scores[i])/2))}}
-  return{vals,conf}
+function reviewConflicts(vals){
+ const bad=new Set(),gs=[...unitRows(),...unitCols(),...unitBoxes()];
+ for(const g of gs)for(const n of ALL){const p=g.filter(i=>vals[i]===n);if(p.length>1)p.forEach(i=>bad.add(i))}return bad
+}
+function valuesHaveSolution(vals){
+ const saveV=state.values,saveR=state.removed;state.values=[...vals];state.removed=Array.from({length:81},()=>new Set());const ok=exactPossible();state.values=saveV;state.removed=saveR;return ok
 }
 $('#recognizeBtn').onclick=async()=>{
- if(!photoImage)return;$('#recognizeBtn').disabled=true;progress(4,'透视校正并切分 81 格');
+ if(!photoImage)return;$('#recognizeBtn').disabled=true;progress(3,'透视校正并切分 81 格');
+ let worker=null;
  try{
-   const board=warpBoard(720),pack=buildContactSheet(board);progress(16,`已过滤备注，仅保留 ${pack.count} 个疑似主数字格`);
-   await loadTesseract();progress(24,'加载 OCR 引擎');
-   const worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text')progress(28+62*(m.progress||0),'批量识别主数字')}});
-   await worker.setParameters({tessedit_char_whitelist:'123456789',tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'});
-   const {data}=await worker.recognize(pack.sheet);await worker.terminate();progress(94,'按 9×9 坐标映射结果');
-   const parsed=parseBoxes(data,pack.tile,pack.accepted,pack.scores);state.ocr=parsed.vals;reviewConfidence=parsed.conf;renderReview();progress(100,'完成：小备注格已留空，请复核橙色格');$('#importOcrBtn').style.display='block'
+   const board=warpBoard(720),items=[];state.ocr=Array(81).fill(0);reviewConfidence=Array(81).fill(0);
+   for(let r=0;r<9;r++)for(let c=0;c<9;c++){const a=cellGlyph(board,r,c);if(a.isMain)items.push({i:idx(r,c),...a})}
+   progress(15,`已过滤小号备注：检测到 ${items.length} 个主数字格`);
+   const uncertain=[];
+   for(const it of items){const t=templateDigit(it.canvas);if(t.value){state.ocr[it.i]=t.value;reviewConfidence[it.i]=t.confidence}else uncertain.push(it)}
+   if(uncertain.length){
+     progress(20,`模板已识别 ${items.length-uncertain.length} 格，${uncertain.length} 格进入 OCR 复核`);
+     await loadTesseract();worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text')progress(24+65*(m.progress||0),'OCR 复核可疑数字')}});
+     await worker.setParameters({tessedit_char_whitelist:'123456789',tessedit_pageseg_mode:'10'});
+     for(let k=0;k<uncertain.length;k++){const it=uncertain[k],{data}=await worker.recognize(it.canvas),txt=(data.text||'').replace(/[^1-9]/g,'');if(txt){state.ocr[it.i]=+txt[0];reviewConfidence[it.i]=Math.round(data.confidence||45)}progress(25+65*(k+1)/uncertain.length,`OCR复核 ${k+1}/${uncertain.length}`)}
+   }
+   const bad=reviewConflicts(state.ocr),solv=valuesHaveSolution(state.ocr);renderReview();
+   progress(100,bad.size?`完成：${bad.size} 个冲突格，请修正红色格`:solv?'完成：题面合法且可解，请人工快速复核':'完成：无直接冲突，但题面不可解，请复核橙色格');
+   $('#importOcrBtn').style.display='block'
  }catch(e){console.error(e);progress(0,'识别失败：'+e.message)}
- finally{$('#recognizeBtn').disabled=false}
+ finally{try{if(worker)await worker.terminate()}catch(e){}$('#recognizeBtn').disabled=false}
 };
 function renderReview(){
-  const g=$('#ocrReview');g.innerHTML='';
-  for(let i=0;i<81;i++){const d=document.createElement('button');d.type='button';d.className='review-cell';if(state.ocr[i]&&reviewConfidence[i]<60)d.classList.add('low');d.textContent=state.ocr[i]||'';d.onclick=()=>{const v=prompt(`${name(i)}：输入 1-9；留空表示该格没有主数字`,state.ocr[i]||'');if(v===null)return;state.ocr[i]=/^[1-9]$/.test(v)?+v:0;reviewConfidence[i]=100;renderReview()};g.appendChild(d)}
+ const g=$('#ocrReview');g.innerHTML='';const bad=reviewConflicts(state.ocr);
+ for(let i=0;i<81;i++){const d=document.createElement('button');d.type='button';d.className='review-cell';if(state.ocr[i]&&reviewConfidence[i]<60)d.classList.add('low');if(bad.has(i))d.style.background='#ffe5e3';d.textContent=state.ocr[i]||'';d.onclick=()=>{const v=prompt(`${name(i)}：输入 1-9；留空代表空格`,state.ocr[i]||'');if(v===null)return;state.ocr[i]=/^[1-9]$/.test(v)?+v:0;reviewConfidence[i]=100;renderReview()};g.appendChild(d)}
 }
 $('#importOcrBtn').onclick=()=>{
-  snapshot();state.values=[...state.ocr];state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));state.notes=Array.from({length:81},()=>new Set());state.selected=0;render();
-  const solveTab=$$('.tab').find(t=>t.dataset.page==='solve');if(solveTab)solveTab.click()
+ const bad=reviewConflicts(state.ocr);if(bad.size){alert('仍有行、列或宫冲突，请先修正红色格。');return}
+ if(!valuesHaveSolution(state.ocr)){alert('当前题面无法形成可解标准数独，请先复核识别结果。');return}
+ snapshot();state.values=[...state.ocr];state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));state.notes=Array.from({length:81},()=>new Set());state.removed=Array.from({length:81},()=>new Set());state.selected=0;clearHintMark();render();
+ const solveTab=$$('.tab').find(t=>t.dataset.page==='solve');if(solveTab)solveTab.click()
 };
+
 
 let prac={cells:Array.from({length:81},()=>new Set()),ans:[],sel:new Set(),msg:''};
 function pkey(i,n){return i+'-'+n} function prAdd(i,ns){ns.forEach(n=>prac.cells[i].add(n))}
@@ -405,8 +538,23 @@ function genPractice(){
 function renderPractice(show=false){const b=$('#practiceBoard');b.innerHTML='';const aset=new Set(prac.ans.map(x=>pkey(...x)));for(let i=0;i<81;i++){const c=document.createElement('div');c.className='pcell';const cs=document.createElement('div');cs.className='pcands';for(const n of ALL){const s=document.createElement('button');s.type='button';s.className='pc';s.textContent=prac.cells[i].has(n)?n:'';const k=pkey(i,n);if(prac.sel.has(k))s.classList.add('pick');if(show&&aset.has(k))s.classList.add('answer');if(s.textContent)s.onclick=()=>{prac.sel.has(k)?prac.sel.delete(k):prac.sel.add(k);renderPractice(show)};cs.appendChild(s)}c.appendChild(cs);b.appendChild(c)}}
 $('#newPracticeBtn').onclick=genPractice;$('#practiceHint').onclick=()=>$('#practiceMsg').textContent=prac.msg||'先生成一题。';$('#practiceAnswer').onclick=()=>{renderPractice(true);$('#practiceMsg').textContent='绿色候选为可删除答案。'};$('#practiceCheck').onclick=()=>{const a=new Set(prac.ans.map(x=>pkey(...x)));const ok=prac.sel.size===a.size&&[...prac.sel].every(x=>a.has(x));$('#practiceMsg').textContent=ok?'正确。':'还不完全正确，可以再观察结构。'};
 
-try{const x=JSON.parse(localStorage.getItem('sudokuCoachV3')||'null');if(x){state.values=x.values||state.values;state.givens=new Set(x.givens||[]);state.notes=(x.notes||[]).length===81?x.notes.map(a=>new Set(a)):state.notes;state.auto=x.auto!==false;state.highlightSame=x.highlightSame!==false}}catch(e){}
+try{const x=JSON.parse(localStorage.getItem('sudokuCoachV4')||'null');if(x){state.values=x.values||state.values;state.givens=new Set(x.givens||[]);state.notes=(x.notes||[]).length===81?x.notes.map(a=>new Set(a)):state.notes;state.removed=(x.removed||[]).length===81?x.removed.map(a=>new Set(a)):state.removed;state.auto=x.auto!==false;state.highlightSame=x.highlightSame!==false}}catch(e){}
 $('#installState').textContent=window.matchMedia('(display-mode: standalone)').matches?'已从主屏幕作为 App 运行':'当前在浏览器中运行，可“添加到主屏幕”';
+
+window.__sudokuTest={
+ state,
+ loadPuzzle:(s)=>{snapshot();state.values=[...s].map(ch=>ch==='.'?0:+ch);state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));state.notes=Array.from({length:81},()=>new Set());state.removed=Array.from({length:81},()=>new Set());clearHintMark();render()},
+ findStep,
+ applyStep:(s)=>{if(s.fill){state.values[s.fill.i]=s.fill.n;state.notes[s.fill.i].clear();state.removed[s.fill.i].clear()}for(const e of s.elim||[])if(!state.values[e.i])state.removed[e.i].add(e.n);clearHintMark();render()},
+ solved:()=>state.values.every(Boolean)&&!state.values.some((v,i)=>v&&hasConflict(i)),
+ values:()=>state.values.join(''),
+ candidate:(i)=>cand(i),
+ exactPossible,
+ recognizeBoardCanvas:(board)=>{const vals=Array(81).fill(0),conf=Array(81).fill(0);for(let r=0;r<9;r++)for(let c=0;c<9;c++){const a=cellGlyph(board,r,c);if(a.isMain){const t=templateDigit(a.canvas);if(t.value){vals[idx(r,c)]=t.value;conf[idx(r,c)]=t.confidence}}}return{vals,conf}},
+ setPhotoCorners:(a)=>{photoCorners=a;updateCorners()},
+ warpBoard
+};
+
 render();genPractice();
 })();
 </script>

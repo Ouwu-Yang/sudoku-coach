@@ -1,7 +1,7 @@
 {
   "name": "数独教练",
   "short_name": "数独教练",
-  "description": "iPhone优先的进阶数独教学、拍照导入与技巧专练PWA",
+  "description": "iPhone 优先的进阶数独教学、图片导入与技巧专练 PWA",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
