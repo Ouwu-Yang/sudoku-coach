@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#f5f5f7">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="./css/app.css">
+<title>数独教练 v5 Beta</title>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">Sudoku Coach</div>
+      <h1 id="pageTitle">做题</h1>
+    </div>
+    <span class="badge">v5 Beta</span>
+  </header>
+
+  <main>
+    <section id="page-solve" class="page active">
+      <div class="card board-card">
+        <div id="board" class="board"></div>
+        <div class="mode-row">
+          <button id="valueMode" class="seg active">填数字</button>
+          <button id="noteMode" class="seg">候选笔记</button>
+          <button id="undoBtn" class="seg">撤销</button>
+          <button id="eraseBtn" class="seg">擦除</button>
+        </div>
+        <div id="keypad" class="keypad"></div>
+      </div>
+      <div class="card">
+        <div class="section-title">棋盘操作</div>
+        <div class="grid2">
+          <button id="sampleBtn" class="btn">载入示例</button>
+          <button id="clearBtn" class="btn">清空</button>
+          <button id="checkBtn" class="btn">检查</button>
+          <button id="exportBtn" class="btn">导出81位</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-scan" class="page">
+      <div class="card">
+        <div class="section-title">① 选择图片</div>
+        <p class="muted">v5把“找棋盘”和“OCR”完全拆开。先确认棋盘，再识别数字。</p>
+        <button id="pickPhoto" class="btn primary wide">拍照或选择图片</button>
+        <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+      </div>
+
+      <div id="cropCard" class="card hidden">
+        <div class="section-title">② 确认棋盘</div>
+        <p id="gridStatus" class="muted">自动寻找棋盘中……</p>
+        <div id="photoStage" class="photo-stage">
+          <canvas id="photoCanvas"></canvas>
+          <button class="corner" data-corner="0"></button>
+          <button class="corner" data-corner="1"></button>
+          <button class="corner" data-corner="2"></button>
+          <button class="corner" data-corner="3"></button>
+        </div>
+        <div class="grid2 topgap">
+          <button id="autoGridBtn" class="btn">重新自动定位</button>
+          <button id="rotateBtn" class="btn">旋转90°</button>
+        </div>
+        <button id="confirmGridBtn" class="btn primary wide topgap">确认棋盘</button>
+      </div>
+
+      <div id="rectifiedCard" class="card hidden">
+        <div class="section-title">③ 检查拉正结果</div>
+        <p class="muted">这里只看棋盘是否正确。格线明显错位时返回调整，不进入OCR。</p>
+        <canvas id="rectifiedCanvas" class="rectified"></canvas>
+        <div class="grid2 topgap">
+          <button id="backCropBtn" class="btn">重新调整</button>
+          <button id="ocrBtn" class="btn primary">继续识别</button>
+        </div>
+      </div>
+
+      <div id="reviewCard" class="card hidden">
+        <div class="section-title">④ OCR校对</div>
+        <div class="progress"><div id="ocrBar"></div></div>
+        <p id="ocrStatus" class="muted">等待识别</p>
+        <div id="reviewGrid" class="review-grid"></div>
+        <button id="importBtn" class="btn primary wide topgap">确认导入棋盘</button>
+      </div>
+    </section>
+
+    <section id="page-hint" class="page">
+      <div class="card">
+        <div class="section-title">分层提示</div>
+        <div class="hint-actions">
+          <button class="btn primary" data-hint="1">提示1</button>
+          <button class="btn" data-hint="2">提示2</button>
+          <button class="btn" data-hint="3">完整逻辑</button>
+        </div>
+        <div id="hintBox" class="hint-box">先在“做题”页录入或导入题目。</div>
+        <button id="applyHint" class="btn primary wide topgap">执行这一步</button>
+      </div>
+    </section>
+
+    <section id="page-train" class="page">
+      <div class="card">
+        <div class="section-title">Wing 训练</div>
+        <p class="muted">不再直接让你“猜删除数”。训练被拆成：识别双候选 → 找强链/枢轴 → 找删除目标。</p>
+        <div class="train-switch">
+          <button class="seg active" data-train="w">W-Wing</button>
+          <button class="seg" data-train="xy">XY-Wing</button>
+        </div>
+      </div>
+      <div class="card">
+        <div id="trainStage" class="train-stage"></div>
+        <div id="trainBoard" class="mini-board"></div>
+        <div class="grid2 topgap">
+          <button id="trainHint" class="btn">给一点提示</button>
+          <button id="trainReset" class="btn">重来</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-settings" class="page">
+      <div class="card">
+        <div class="section-title">v5 架构状态</div>
+        <div class="status-row"><span>Scanner</span><b>独立模块</b></div>
+        <div class="status-row"><span>Sudoku Engine</span><b>独立模块</b></div>
+        <div class="status-row"><span>Teacher</span><b>独立模块</b></div>
+        <div class="status-row"><span>Training</span><b>独立模块</b></div>
+        <p class="muted topgap">Beta阶段重点是验证结构和工作流，避免再在一个HTML里持续打补丁。</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-page="solve"><span>▦</span>做题</button>
+    <button class="tab" data-page="scan"><span>▧</span>扫描</button>
+    <button class="tab" data-page="hint"><span>?</span>提示</button>
+    <button class="tab" data-page="train"><span>◎</span>专练</button>
+    <button class="tab" data-page="settings"><span>⚙</span>设置</button>
+  </nav>
+</div>
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
