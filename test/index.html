@@ -105,7 +105,7 @@ button{border:0;background:none;color:inherit}
 <main class="app">
   <header class="topbar">
     <div class="brand"><h1>数独教练</h1><p>iPhone 优先 · 进阶技巧训练</p></div>
-    <div class="version">v4.0</div>
+    <div class="version">v4.2</div>
   </header>
 
   <section id="page-solve" class="page active">
@@ -442,7 +442,7 @@ function warpBoard(size=720){
 function cellGlyph(board,r,c){
   const S=board.width,cell=S/9,pad=cell*.16,N=112;
   const cv=document.createElement('canvas');cv.width=cv.height=N;const cx=cv.getContext('2d',{willReadFrequently:true});
-  cx.drawImage(board,c*cell+pad,r*cell+pad,cell*(1-2*pad),cell*(1-2*pad),0,0,N,N);
+  cx.drawImage(board,c*cell+pad,r*cell+pad,cell-2*pad,cell-2*pad,0,0,N,N);
   const im=cx.getImageData(0,0,N,N),d=im.data,gray=new Float32Array(N*N);
   let mean=0;for(let p=0,k=0;p<gray.length;p++,k+=4){gray[p]=.299*d[k]+.587*d[k+1]+.114*d[k+2];mean+=gray[p]}mean/=gray.length;
   const th=Math.max(55,Math.min(220,mean-38)),bin=new Uint8Array(N*N);
@@ -505,12 +505,27 @@ $('#recognizeBtn').onclick=async()=>{
    if(uncertain.length){
      progress(20,`模板已识别 ${items.length-uncertain.length} 格，${uncertain.length} 格进入 OCR 复核`);
      await loadTesseract();worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text')progress(24+65*(m.progress||0),'OCR 复核可疑数字')}});
-     await worker.setParameters({tessedit_char_whitelist:'123456789',tessedit_pageseg_mode:'10'});
-     for(let k=0;k<uncertain.length;k++){const it=uncertain[k],{data}=await worker.recognize(it.canvas),txt=(data.text||'').replace(/[^1-9]/g,'');if(txt){state.ocr[it.i]=+txt[0];reviewConfidence[it.i]=Math.round(data.confidence||45)}progress(25+65*(k+1)/uncertain.length,`OCR复核 ${k+1}/${uncertain.length}`)}
+     for(let k=0;k<uncertain.length;k++){
+       const it=uncertain[k];let bestTxt='',bestConf=0;
+       // psm 10 对单个数字最稳定；若漏识别，再用 8 / 13 兜底。
+       for(const psm of ['10','8','13']){
+         await worker.setParameters({tessedit_char_whitelist:'123456789',tessedit_pageseg_mode:psm});
+         const {data}=await worker.recognize(it.canvas),txt=(data.text||'').replace(/[^1-9]/g,''),conf=Math.round(data.confidence||0);
+         if(txt && conf>=bestConf){bestTxt=txt;bestConf=conf}
+         if(bestTxt && bestConf>=70)break;
+       }
+       if(bestTxt){state.ocr[it.i]=+bestTxt[0];reviewConfidence[it.i]=bestConf||45}
+       progress(25+65*(k+1)/uncertain.length,`OCR复核 ${k+1}/${uncertain.length}`)
+     }
    }
-   const bad=reviewConflicts(state.ocr),solv=valuesHaveSolution(state.ocr);renderReview();
-   progress(100,bad.size?`完成：${bad.size} 个冲突格，请修正红色格`:solv?'完成：题面合法且可解，请人工快速复核':'完成：无直接冲突，但题面不可解，请复核橙色格');
-   $('#importOcrBtn').style.display='block'
+   const clueCount=state.ocr.filter(Boolean).length,bad=reviewConflicts(state.ocr),solv=clueCount>=17&&valuesHaveSolution(state.ocr);renderReview();
+   if(clueCount<17){
+     progress(100,`识别失败：只识别到 ${clueCount} 个主数字。请检查四角是否对准数独外框后重试。`);
+     $('#importOcrBtn').style.display='none';
+   }else{
+     progress(100,bad.size?`完成：${bad.size} 个冲突格，请修正红色格`:solv?`完成：识别到 ${clueCount} 个主数字，题面合法且可解，请快速复核`:'完成：无直接冲突，但题面不可解，请复核识别结果');
+     $('#importOcrBtn').style.display='block';
+   }
  }catch(e){console.error(e);progress(0,'识别失败：'+e.message)}
  finally{try{if(worker)await worker.terminate()}catch(e){}$('#recognizeBtn').disabled=false}
 };
@@ -519,6 +534,8 @@ function renderReview(){
  for(let i=0;i<81;i++){const d=document.createElement('button');d.type='button';d.className='review-cell';if(state.ocr[i]&&reviewConfidence[i]<60)d.classList.add('low');if(bad.has(i))d.style.background='#ffe5e3';d.textContent=state.ocr[i]||'';d.onclick=()=>{const v=prompt(`${name(i)}：输入 1-9；留空代表空格`,state.ocr[i]||'');if(v===null)return;state.ocr[i]=/^[1-9]$/.test(v)?+v:0;reviewConfidence[i]=100;renderReview()};g.appendChild(d)}
 }
 $('#importOcrBtn').onclick=()=>{
+ const clueCount=state.ocr.filter(Boolean).length;
+ if(clueCount<17){alert(`当前只识别到 ${clueCount} 个主数字，不能导入。请重新对齐四角并识别。`);return}
  const bad=reviewConflicts(state.ocr);if(bad.size){alert('仍有行、列或宫冲突，请先修正红色格。');return}
  if(!valuesHaveSolution(state.ocr)){alert('当前题面无法形成可解标准数独，请先复核识别结果。');return}
  snapshot();state.values=[...state.ocr];state.givens=new Set(state.values.map((v,i)=>v?i:-1).filter(i=>i>=0));state.notes=Array.from({length:81},()=>new Set());state.removed=Array.from({length:81},()=>new Set());state.selected=0;clearHintMark();render();
