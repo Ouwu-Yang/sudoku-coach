@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f5f5f7">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="stylesheet" href="./css/app.css">
-<title>数独教练 v5.1 Beta</title>
+<title>数独教练 v5.2 Beta</title>
 </head>
 <body>
 <div class="app">
@@ -15,7 +15,7 @@
       <div class="eyebrow">Sudoku Coach</div>
       <h1 id="pageTitle">做题</h1>
     </div>
-    <span class="badge">v5.1 Beta</span>
+    <span class="badge">v5.2 Beta</span>
   </header>
 
   <main>
@@ -117,18 +117,11 @@
         <button id="importBtn" class="btn primary wide topgap">确认导入棋盘</button>
       </div>
     </section>
-
-    <section id="page-hint" class="page">
+    <section id="page-library" class="page">
       <div class="card">
-        <div class="section-title">分步解题引导</div>
-        <p class="muted">这个页面与“做题 → 遇到困难”使用同一套解题步骤。建议优先在做题页直接使用引导。</p>
-        <div class="hint-actions">
-          <button class="btn primary" data-hint="1">方向</button>
-          <button class="btn" data-hint="2">结构</button>
-          <button class="btn" data-hint="3">完整逻辑</button>
-        </div>
-        <div id="hintBox" class="hint-box">先在“做题”页录入或导入题目。</div>
-        <button id="applyHint" class="btn primary wide topgap">执行这一步</button>
+        <div class="section-title">最近题目</div>
+        <p class="muted">扫描导入后自动保存。没做完可以继续，做完以后也可以从最初题面重新练习。</p>
+        <div id="libraryList" class="library-list"></div>
       </div>
     </section>
 
@@ -166,7 +159,7 @@
   <nav class="tabbar">
     <button class="tab active" data-page="solve"><span>▦</span>做题</button>
     <button class="tab" data-page="scan"><span>▧</span>扫描</button>
-    <button class="tab" data-page="hint"><span>?</span>提示</button>
+    <button class="tab" data-page="library"><span>▤</span>题库</button>
     <button class="tab" data-page="train"><span>◎</span>专练</button>
     <button class="tab" data-page="settings"><span>⚙</span>设置</button>
   </nav>

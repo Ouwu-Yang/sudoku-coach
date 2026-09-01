@@ -32,3 +32,16 @@ button{font:inherit}.btn,.seg,.key{border:1px solid var(--line);background:#f7f7
  .coach-entry-head{align-items:flex-start}
  .coach-entry-head .btn{min-width:104px}
 }
+
+.library-list{display:flex;flex-direction:column;gap:10px}
+.library-empty{text-align:center;padding:28px 8px;color:var(--muted);line-height:1.7}
+.library-item{border:1px solid #e3e7eb;background:#fff;border-radius:16px;padding:12px}
+.library-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.library-title{font-size:15px;font-weight:850}
+.library-meta,.library-tech{font-size:12px;color:var(--muted);margin-top:4px}
+.library-status{font-size:12px;font-weight:800;border-radius:999px;padding:5px 8px;background:#eef2f6;color:#555;white-space:nowrap}
+.library-status.done{background:#e8f7ed;color:#16843b}
+.library-progress{height:7px;background:#edf0f3;border-radius:999px;overflow:hidden;margin-top:10px}
+.library-progress>i{display:block;height:100%;background:var(--accent)}
+.library-actions{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:10px}
+.library-delete{min-width:48px;color:#b42318}

@@ -3,21 +3,49 @@ import {SudokuBoard,ALL,name} from './core.js';
 import {SudokuSolver} from './solver.js';
 import {SudokuScanner} from './scanner.js';
 import {TRAINING} from './trainer.js';
+import {PuzzleLibrary} from './storage.js';
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-const board=new SudokuBoard();const solver=new SudokuSolver(board);let selected=0,mode='value',currentStep=null;
+const board=new SudokuBoard();const solver=new SudokuSolver(board);const library=new PuzzleLibrary();
+let selected=0,mode='value',currentStep=null,activePuzzleId=null;
+let sessionStats={usedHints:0,fullHints:0,techniques:[]};
 const boardEl=$('#board');
+function resetSession(){sessionStats={usedHints:0,fullHints:0,techniques:[]}}
+function saveActive(lastTechnique=null){if(!activePuzzleId)return;library.save(activePuzzleId,board,{lastTechnique});renderLibrary()}
+function fmtTime(iso){if(!iso)return'';const d=new Date(iso),n=new Date();return d.toDateString()===n.toDateString()?`今天 ${d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}`:`${d.getMonth()+1}月${d.getDate()}日 ${d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}`}
+function renderLibrary(){
+ const el=$('#libraryList');if(!el)return;const items=library.list();
+ if(!items.length){el.innerHTML='<div class="library-empty">还没有保存的题目。<br>扫描并导入一道题后，会自动出现在这里。</div>';return}
+ el.innerHTML='';
+ for(const item of items){
+   const filled=item.current?.values?.filter(Boolean).length||0,done=item.completed||filled===81;
+   const card=document.createElement('div');card.className='library-item';
+   card.innerHTML=`<div class="library-top"><div><div class="library-title">${item.title||'数独题目'}</div><div class="library-meta">${fmtTime(item.updatedAt)} · ${item.source==='scan'?'扫描导入':'手工录入'}</div></div><span class="library-status ${done?'done':''}">${done?'已完成':'未完成'}</span></div>
+   <div class="library-progress"><i style="width:${Math.round(filled/81*100)}%"></i></div>
+   <div class="library-tech">${filled}/81${item.lastTechnique?' · 最近技巧：'+item.lastTechnique:''}</div>
+   <div class="library-actions"><button class="btn continue">${done?'查看完成盘':'继续练习'}</button><button class="btn restart">重新练习</button><button class="btn library-delete del">删</button></div>`;
+   card.querySelector('.continue').onclick=()=>openSaved(item.id,false);
+   card.querySelector('.restart').onclick=()=>openSaved(item.id,true);
+   card.querySelector('.del').onclick=()=>{if(confirm('删除这道题的记录？')){library.remove(item.id);if(activePuzzleId===item.id)activePuzzleId=null;renderLibrary()}};
+   el.appendChild(card)
+ }
+}
+function openSaved(id,fresh){
+ if(!library.restore(id,board,{fresh}))return;
+ activePuzzleId=id;resetSession();currentStep=null;coachStep=null;renderBoard();
+ $$('.tab').find(x=>x.dataset.page==='solve')?.click()
+}
 function renderBoard(){
  boardEl.innerHTML='';
  for(let i=0;i<81;i++){const b=document.createElement('button');b.className='cell'+(board.givens.has(i)?' given':'')+(i===selected?' selected':'');const v=board.values[i];if(v)b.innerHTML=`<span class="value">${v}</span>`;else{const c=board.candidates(i),show=board.notes[i].size?[...board.notes[i]]:c;b.innerHTML='<span class="cands">'+ALL.map(n=>`<span class="cand ${currentStep?.elim?.some(e=>e.i===i&&e.n===n)?'elim':''}">${show.includes(n)?n:''}</span>`).join('')+'</span>'}if(currentStep?.cells?.includes(i))b.classList.add('hint-cell');b.onclick=()=>{selected=i;renderBoard()};boardEl.appendChild(b)}
 }
-for(const n of ALL){const k=document.createElement('button');k.className='key';k.textContent=n;k.onclick=()=>{if(board.givens.has(selected))return;if(mode==='note')board.toggleNote(selected,n);else board.set(selected,n);currentStep=null;coachStep=null;$('#solveCoach').classList.add('hidden');renderBoard()};$('#keypad').appendChild(k)}
+for(const n of ALL){const k=document.createElement('button');k.className='key';k.textContent=n;k.onclick=()=>{if(board.givens.has(selected))return;if(mode==='note')board.toggleNote(selected,n);else board.set(selected,n);currentStep=null;coachStep=null;$('#solveCoach').classList.add('hidden');renderBoard();saveActive()};$('#keypad').appendChild(k)}
 $('#valueMode').onclick=()=>{mode='value';$('#valueMode').classList.add('active');$('#noteMode').classList.remove('active')};
 $('#noteMode').onclick=()=>{mode='note';$('#noteMode').classList.add('active');$('#valueMode').classList.remove('active')};
-$('#eraseBtn').onclick=()=>{board.erase(selected);currentStep=null;renderBoard()};
-$('#undoBtn').onclick=()=>{board.undo();currentStep=null;renderBoard()};
-$('#sampleBtn').onclick=()=>{board.load('380000000067080053509300008978001346050763009603008570795632000842000635136800297');currentStep=null;renderBoard()};
-$('#clearBtn').onclick=()=>{board.load('0'.repeat(81));renderBoard()};
+$('#eraseBtn').onclick=()=>{board.erase(selected);currentStep=null;renderBoard();saveActive()};
+$('#undoBtn').onclick=()=>{board.undo();currentStep=null;renderBoard();saveActive()};
+$('#sampleBtn').onclick=()=>{board.load('380000000067080053509300008978001346050763009603008570795632000842000635136800297');activePuzzleId=null;resetSession();currentStep=null;renderBoard()};
+$('#clearBtn').onclick=()=>{board.load('0'.repeat(81));activePuzzleId=null;resetSession();renderBoard()};
 $('#checkBtn').onclick=()=>{const v=board.validate();alert(v.ok?'当前盘面没有直接冲突。':`发现 ${v.conflicts.length} 个冲突格、${v.dead.length} 个零候选格。`)};
 $('#exportBtn').onclick=()=>prompt('81位题目字符串',board.string());
 
@@ -74,6 +102,7 @@ function renderCoach(){
 }
 function startCoach(){
   coachStep=solver.find();coachLevel=1;
+  if(coachStep){sessionStats.usedHints++;sessionStats.techniques.push(coachStep.tech)}
   $('#solveCoach').classList.remove('hidden');$('#learningCard').classList.add('hidden');
   if(!coachStep){
     $('#solveCoachBox').innerHTML=board.values.every(Boolean)?'<b>题目已经完成。</b>':'<b>当前引擎没有找到可推进步骤。</b><br>如果盘面是正确的，可能需要尚未实现的更高阶技巧。';
@@ -92,9 +121,10 @@ function showLearningCard(step){
 }
 $('#stuckBtn').onclick=startCoach;
 $('#coachPrev').onclick=()=>{if(coachLevel>1){coachLevel--;renderCoach()}};
-$('#coachNext').onclick=()=>{if(coachLevel<4){coachLevel++;renderCoach()}};
+$('#coachNext').onclick=()=>{if(coachLevel<4){coachLevel++;if(coachLevel===4)sessionStats.fullHints++;renderCoach()}};
 $('#coachApply').onclick=()=>{
-  if(!coachStep)return;const done=coachStep;board.apply(done);coachStep=null;currentStep=null;renderBoard();
+  if(!coachStep)return;const done=coachStep;board.apply(done);coachStep=null;currentStep=null;renderBoard();saveActive(done.tech);
+  if(activePuzzleId&&board.values.every(Boolean)&&board.validate().ok)library.addAttempt(activePuzzleId,{...sessionStats,completed:true});
   $('#solveCoach').classList.add('hidden');showLearningCard(done)
 };
 $('#coachDidIt').onclick=()=>{
@@ -102,17 +132,6 @@ $('#coachDidIt').onclick=()=>{
   if(done)showLearningCard(done)
 };
 $('#nextCoachBtn').onclick=startCoach;
-
-// 提示页作为快捷入口，仍使用同一个 Solver 步骤。
-$$('[data-hint]').forEach(btn=>btn.onclick=()=>{
-  const lv=+btn.dataset.hint;currentStep=solver.find();
-  if(!currentStep){$('#hintBox').textContent=board.values.every(Boolean)?'题目已完成。':'当前未找到可推进步骤。';renderBoard();return}
-  renderBoard();const s=currentStep;
-  $('#hintBox').innerHTML=lv===1?`<b>${s.tech}</b><br>${directionText(s)}`:
-    lv===2?`<b>${s.tech}</b><br>${structureText(s)}`:
-    `<b>${s.tech}</b><br>${s.text}<br><br><b>结论：</b>${s.fill?`${name(s.fill.i)}=${s.fill.n}`:eliminationText(s)}`
-});
-$('#applyHint').onclick=()=>{const s=currentStep||solver.find();if(!s)return;board.apply(s);currentStep=null;renderBoard();$('#hintBox').innerHTML=`<b>已执行：${s.tech}</b>`;showLearningCard(s)};
 
 const scanner=new SudokuScanner($('#photoCanvas'),$('#rectifiedCanvas'));const cornerEls=$$('.corner');
 function placeCorners(){const r=$('#photoCanvas').getBoundingClientRect(),sx=r.width/$('#photoCanvas').width,sy=r.height/$('#photoCanvas').height;cornerEls.forEach((e,i)=>{e.style.left=scanner.corners[i][0]*sx+'px';e.style.top=scanner.corners[i][1]*sy+'px'})}
@@ -127,7 +146,10 @@ $('#backCropBtn').onclick=()=>$('#cropCard').scrollIntoView({behavior:'smooth'})
 $('#ocrBtn').onclick=async()=>{const rc=$('#reviewCard');rc.classList.remove('hidden');$('#ocrStatus').textContent='开始OCR…';const res=await scanner.recognize((p,s)=>{$('#ocrBar').style.width=Math.round(p*100)+'%';$('#ocrStatus').textContent=s});window._ocr=res;renderReview(res);$('#ocrStatus').textContent=`检测到 ${res.mainCount} 个主数字格，请人工快速复核。`;rc.scrollIntoView({behavior:'smooth'})};
 function conflicts(vals){const bad=new Set();for(let r=0;r<9;r++)for(const n of ALL){const p=[];for(let c=0;c<9;c++)if(vals[r*9+c]===n)p.push(r*9+c);if(p.length>1)p.forEach(i=>bad.add(i))}for(let c=0;c<9;c++)for(const n of ALL){const p=[];for(let r=0;r<9;r++)if(vals[r*9+c]===n)p.push(r*9+c);if(p.length>1)p.forEach(i=>bad.add(i))}return bad}
 function renderReview(res){const g=$('#reviewGrid');g.innerHTML='';const bad=conflicts(res.values);for(let i=0;i<81;i++){const b=document.createElement('button');b.className='review-cell'+(res.values[i]&&res.conf[i]<55?' low':'')+(bad.has(i)?' conflict':'');b.textContent=res.values[i]||'';b.onclick=()=>{const v=prompt(`${name(i)}：输入1-9；留空=空格`,res.values[i]||'');if(v===null)return;res.values[i]=/^[1-9]$/.test(v)?+v:0;res.conf[i]=100;renderReview(res)};g.appendChild(b)}}
-$('#importBtn').onclick=()=>{const r=window._ocr;if(!r)return;if(conflicts(r.values).size){alert('仍有冲突，请先修正红色格。');return}board.load(r.values);renderBoard();$$('.tab').find(x=>x.dataset.page==='solve').click()};
+$('#importBtn').onclick=()=>{const r=window._ocr;if(!r)return;if(conflicts(r.values).size){alert('仍有冲突，请先修正红色格。');return}
+ board.load(r.values);resetSession();const item=library.create(board,{source:'scan',title:'扫描题目'});activePuzzleId=item.id;
+ renderBoard();renderLibrary();$$('.tab').find(x=>x.dataset.page==='solve').click()
+};
 
 let trainType='w',trainStep=0,trainPicked=new Set();
 function renderTrain(){const t=TRAINING[trainType],st=t.stages[trainStep];$('#trainStage').innerHTML=`<b>${t.title} · ${st.title}</b>${st.text}<br><span class="muted">当前要点：${trainStep===0?'先识别结构，不急着删除候选。':trainStep===1?'确认连接关系。':'最后才判断删除目标。'}</span>`;const g=$('#trainBoard');g.innerHTML='';for(let i=0;i<81;i++){const b=document.createElement('button');b.className='mini-cell';const c=t.cells[i]||[];b.innerHTML='<span class="mini-cands">'+ALL.map(n=>`<span class="n">${c.includes(n)?n:''}</span>`).join('')+'</span>';if(trainPicked.has(i))b.classList.add('target');b.onclick=()=>pickTrain(i);g.appendChild(b)}}
@@ -136,6 +158,6 @@ $$('[data-train]').forEach(b=>b.onclick=()=>{$$('[data-train]').forEach(x=>x.cla
 $('#trainHint').onclick=()=>{$('#trainStage').innerHTML+=`<br><b>提示：</b>${TRAINING[trainType].stages[trainStep].hint}`};
 $('#trainReset').onclick=()=>{trainStep=0;trainPicked.clear();renderTrain()};
 
-$$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');$$('.page').forEach(x=>x.classList.remove('active'));$('#page-'+t.dataset.page).classList.add('active');$('#pageTitle').textContent={solve:'做题',scan:'扫描',hint:'提示',train:'专练',settings:'设置'}[t.dataset.page]});
-renderBoard();renderTrain();
+$$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');$$('.page').forEach(x=>x.classList.remove('active'));$('#page-'+t.dataset.page).classList.add('active');$('#pageTitle').textContent={solve:'做题',scan:'扫描',library:'题库',train:'专练',settings:'设置'}[t.dataset.page]});
+renderBoard();renderTrain();renderLibrary();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
