@@ -105,7 +105,7 @@ button{border:0;background:none;color:inherit}
 <main class="app">
   <header class="topbar">
     <div class="brand"><h1>数独教练</h1><p>iPhone 优先 · 进阶技巧训练</p></div>
-    <div class="version">v4.2</div>
+    <div class="version">v4.3</div>
   </header>
 
   <section id="page-solve" class="page active">
@@ -146,7 +146,7 @@ button{border:0;background:none;color:inherit}
           <button type="button" class="crop-corner" id="corner2" aria-label="右下角"></button>
           <button type="button" class="crop-corner" id="corner3" aria-label="左下角"></button>
         </div>
-        <div class="crop-help">照片载入后，把 4 个蓝点拖到数独外框四个角。新版会先切成 81 格，再过滤小号备注数字，只把“居中、尺寸足够大的主数字”交给 OCR。</div>
+        <div class="crop-help">照片载入后会先自动寻找数独外框。请确认 4 个蓝点落在棋盘四角；如果自动定位不准，再手工拖动。识别时会切成 81 格，并过滤小号候选数字。</div>
       </div>
       <div class="hero-actions" style="margin-top:12px">
         <button class="btn" id="resetCornersBtn" disabled>重置四角</button>
@@ -396,7 +396,7 @@ $('#pickPhotoBtn').onclick=()=>$('#photoInput').click();
 $('#photoInput').onchange=e=>{
   const file=e.target.files?.[0]; if(!file)return;
   const img=new Image();
-  img.onload=()=>{photoImage=img;photoRotation=0;drawPhoto();$('#recognizeBtn').disabled=false;$('#resetCornersBtn').disabled=false;$('#rotatePhotoBtn').disabled=false;progress(0,'照片已载入，请先对齐四角')};
+  img.onload=()=>{photoImage=img;photoRotation=0;drawPhoto();$('#recognizeBtn').disabled=false;$('#resetCornersBtn').disabled=false;$('#rotatePhotoBtn').disabled=false;const ok=autoDetectSudoku();progress(0,ok?'已自动定位数独外框；请确认4个蓝点落在棋盘四角':'未能自动定位，请手工拖动4个蓝点到棋盘外框四角')};
   img.src=URL.createObjectURL(file);
 };
 function rotatedDims(){return photoRotation%180===0?[photoImage.naturalWidth,photoImage.naturalHeight]:[photoImage.naturalHeight,photoImage.naturalWidth]}
@@ -415,6 +415,53 @@ function resetCorners(){
   const w=photoCanvas.width,h=photoCanvas.height,m=Math.max(12,Math.min(w,h)*.05);
   photoCorners=[[m,m],[w-m,m],[w-m,h-m],[m,h-m]];updateCorners()
 }
+
+function _clusters(vals){
+  const out=[];
+  for(const v of vals){
+    if(!out.length||v>out[out.length-1][out[out.length-1].length-1]+1)out.push([v]);
+    else out[out.length-1].push(v)
+  }
+  return out.map(a=>Math.round(a.reduce((s,x)=>s+x,0)/a.length))
+}
+function _bestQuad(lines,dim){
+  if(lines.length<4)return null;
+  let best=null,bestScore=1e9;
+  for(let a=0;a<lines.length-3;a++)for(let b=a+1;b<lines.length-2;b++)for(let c=b+1;c<lines.length-1;c++)for(let d=c+1;d<lines.length;d++){
+    const q=[lines[a],lines[b],lines[c],lines[d]],g=[q[1]-q[0],q[2]-q[1],q[3]-q[2]];
+    const m=(g[0]+g[1]+g[2])/3;if(m<dim*.06)continue;
+    const sd=Math.sqrt(g.reduce((s,x)=>s+(x-m)*(x-m),0)/3),span=q[3]-q[0];
+    if(span<dim*.25)continue;
+    const score=sd/(m+1e-6);
+    if(score<bestScore){bestScore=score;best=q}
+  }
+  return bestScore<.12?best:null
+}
+function autoDetectSudoku(){
+  if(!photoImage)return false;
+  const W=photoCanvas.width,H=photoCanvas.height,im=photoCtx.getImageData(0,0,W,H).data;
+  // Major 3x3 lines are much darker/longer than ordinary cell lines in the
+  // two screenshot styles used in regression tests.
+  const dark=new Uint8Array(W*H);
+  for(let p=0,k=0;p<dark.length;p++,k+=4){
+    const g=.299*im[k]+.587*im[k+1]+.114*im[k+2];dark[p]=g<145?1:0
+  }
+  const hs=[],vs=[];
+  for(let y=0;y<H;y++){
+    let run=0,max=0;for(let x=0;x<W;x++){if(dark[y*W+x]){run++;if(run>max)max=run}else run=0}
+    if(max/W>.48)hs.push(y)
+  }
+  for(let x=0;x<W;x++){
+    let run=0,max=0;for(let y=0;y<H;y++){if(dark[y*W+x]){run++;if(run>max)max=run}else run=0}
+    if(max/H>.30)vs.push(x)
+  }
+  const hy=_bestQuad(_clusters(hs),H),vx=_bestQuad(_clusters(vs),W);
+  if(!hy||!vx)return false;
+  const hspan=hy[3]-hy[0],vspan=vx[3]-vx[0],ratio=hspan/vspan;
+  if(ratio<.82||ratio>1.18)return false;
+  photoCorners=[[vx[0],hy[0]],[vx[3],hy[0]],[vx[3],hy[3]],[vx[0],hy[3]]];
+  updateCorners();return true
+}
 function updateCorners(){
   const rect=photoCanvas.getBoundingClientRect(),sx=rect.width/photoCanvas.width,sy=rect.height/photoCanvas.height;
   cornerEls.forEach((el,i)=>{el.style.left=photoCorners[i][0]*sx+'px';el.style.top=photoCorners[i][1]*sy+'px'})
@@ -427,7 +474,7 @@ cornerEls.forEach((el,i)=>{
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',()=>drag=false);el.addEventListener('pointercancel',()=>drag=false)
 });
 $('#resetCornersBtn').onclick=resetCorners;
-$('#rotatePhotoBtn').onclick=()=>{photoRotation=(photoRotation+90)%360;drawPhoto()};
+$('#rotatePhotoBtn').onclick=()=>{photoRotation=(photoRotation+90)%360;drawPhoto();const ok=autoDetectSudoku();progress(0,ok?'旋转完成并已重新定位棋盘':'旋转完成，请手工对齐四角')};
 
 function solve8(A,b){const n=8,M=A.map((r,i)=>[...r,b[i]]);for(let c=0;c<n;c++){let p=c;for(let r=c+1;r<n;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;[M[c],M[p]]=[M[p],M[c]];const d=M[c][c];if(Math.abs(d)<1e-10)throw new Error('四角位置无效');for(let j=c;j<=n;j++)M[c][j]/=d;for(let r=0;r<n;r++)if(r!==c){const f=M[r][c];for(let j=c;j<=n;j++)M[r][j]-=f*M[c][j]}}return M.map(r=>r[n])}
 function homography(dst,src){const A=[],b=[];for(let k=0;k<4;k++){const [x,y]=dst[k],[u,v]=src[k];A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v)}return [...solve8(A,b),1]}
@@ -500,22 +547,25 @@ $('#recognizeBtn').onclick=async()=>{
    const board=warpBoard(720),items=[];state.ocr=Array(81).fill(0);reviewConfidence=Array(81).fill(0);
    for(let r=0;r<9;r++)for(let c=0;c<9;c++){const a=cellGlyph(board,r,c);if(a.isMain)items.push({i:idx(r,c),...a})}
    progress(15,`已过滤小号备注：检测到 ${items.length} 个主数字格`);
-   const uncertain=[];
-   for(const it of items){const t=templateDigit(it.canvas);if(t.value){state.ocr[it.i]=t.value;reviewConfidence[it.i]=t.confidence}else uncertain.push(it)}
-   if(uncertain.length){
-     progress(20,`模板已识别 ${items.length-uncertain.length} 格，${uncertain.length} 格进入 OCR 复核`);
-     await loadTesseract();worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text')progress(24+65*(m.progress||0),'OCR 复核可疑数字')}});
-     for(let k=0;k<uncertain.length;k++){
-       const it=uncertain[k];let bestTxt='',bestConf=0;
-       // psm 10 对单个数字最稳定；若漏识别，再用 8 / 13 兜底。
+   if(items.length){
+     progress(20,`检测到 ${items.length} 个主数字，开始逐格 OCR`);
+     await loadTesseract();
+     worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='loading language traineddata')progress(21,'加载数字模型')}});
+     for(let k=0;k<items.length;k++){
+       const it=items[k],reads=[];
        for(const psm of ['10','8','13']){
          await worker.setParameters({tessedit_char_whitelist:'123456789',tessedit_pageseg_mode:psm});
          const {data}=await worker.recognize(it.canvas),txt=(data.text||'').replace(/[^1-9]/g,''),conf=Math.round(data.confidence||0);
-         if(txt && conf>=bestConf){bestTxt=txt;bestConf=conf}
-         if(bestTxt && bestConf>=70)break;
+         if(txt)reads.push({v:+txt[0],c:conf});
        }
-       if(bestTxt){state.ocr[it.i]=+bestTxt[0];reviewConfidence[it.i]=bestConf||45}
-       progress(25+65*(k+1)/uncertain.length,`OCR复核 ${k+1}/${uncertain.length}`)
+       if(reads.length){
+         const score={};
+         for(const r of reads)score[r.v]=(score[r.v]||0)+1+r.c/200;
+         const ranked=Object.keys(score).map(Number).sort((a,b)=>score[b]-score[a]);
+         state.ocr[it.i]=ranked[0];
+         reviewConfidence[it.i]=Math.min(100,Math.round((score[ranked[0]]/3)*70));
+       }
+       progress(22+70*(k+1)/items.length,`OCR ${k+1}/${items.length} · ${name(it.i)}`)
      }
    }
    const clueCount=state.ocr.filter(Boolean).length,bad=reviewConflicts(state.ocr),solv=clueCount>=17&&valuesHaveSolution(state.ocr);renderReview();
