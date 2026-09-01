@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f5f5f7">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="stylesheet" href="./css/app.css">
-<title>数独教练 v5 Beta</title>
+<title>数独教练 v5.1 Beta</title>
 </head>
 <body>
 <div class="app">
@@ -15,7 +15,7 @@
       <div class="eyebrow">Sudoku Coach</div>
       <h1 id="pageTitle">做题</h1>
     </div>
-    <span class="badge">v5 Beta</span>
+    <span class="badge">v5.1 Beta</span>
   </header>
 
   <main>
@@ -30,6 +30,39 @@
         </div>
         <div id="keypad" class="keypad"></div>
       </div>
+      <div class="card coach-entry-card">
+        <div class="coach-entry-head">
+          <div>
+            <div class="section-title">遇到困难？</div>
+            <p class="muted">不直接给答案。按“方向 → 结构 → 推理 → 完整逻辑”逐层提示。</p>
+          </div>
+          <button id="stuckBtn" class="btn primary">开始引导</button>
+        </div>
+        <div id="solveCoach" class="solve-coach hidden">
+          <div class="coach-progress">
+            <span class="coach-dot active">1</span><i></i>
+            <span class="coach-dot">2</span><i></i>
+            <span class="coach-dot">3</span><i></i>
+            <span class="coach-dot">4</span>
+          </div>
+          <div id="solveCoachBox" class="hint-box"></div>
+          <div class="coach-actions">
+            <button id="coachPrev" class="btn">上一步</button>
+            <button id="coachNext" class="btn primary">继续提示</button>
+          </div>
+          <div id="coachFinalActions" class="grid2 topgap hidden">
+            <button id="coachDidIt" class="btn">我自己完成了</button>
+            <button id="coachApply" class="btn primary">执行这一步</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="learningCard" class="card hidden">
+        <div class="section-title">本步学习卡</div>
+        <div id="learningContent"></div>
+        <button id="nextCoachBtn" class="btn primary wide topgap">继续找下一步</button>
+      </div>
+
       <div class="card">
         <div class="section-title">棋盘操作</div>
         <div class="grid2">
@@ -87,10 +120,11 @@
 
     <section id="page-hint" class="page">
       <div class="card">
-        <div class="section-title">分层提示</div>
+        <div class="section-title">分步解题引导</div>
+        <p class="muted">这个页面与“做题 → 遇到困难”使用同一套解题步骤。建议优先在做题页直接使用引导。</p>
         <div class="hint-actions">
-          <button class="btn primary" data-hint="1">提示1</button>
-          <button class="btn" data-hint="2">提示2</button>
+          <button class="btn primary" data-hint="1">方向</button>
+          <button class="btn" data-hint="2">结构</button>
           <button class="btn" data-hint="3">完整逻辑</button>
         </div>
         <div id="hintBox" class="hint-box">先在“做题”页录入或导入题目。</div>

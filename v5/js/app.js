@@ -11,7 +11,7 @@ function renderBoard(){
  boardEl.innerHTML='';
  for(let i=0;i<81;i++){const b=document.createElement('button');b.className='cell'+(board.givens.has(i)?' given':'')+(i===selected?' selected':'');const v=board.values[i];if(v)b.innerHTML=`<span class="value">${v}</span>`;else{const c=board.candidates(i),show=board.notes[i].size?[...board.notes[i]]:c;b.innerHTML='<span class="cands">'+ALL.map(n=>`<span class="cand ${currentStep?.elim?.some(e=>e.i===i&&e.n===n)?'elim':''}">${show.includes(n)?n:''}</span>`).join('')+'</span>'}if(currentStep?.cells?.includes(i))b.classList.add('hint-cell');b.onclick=()=>{selected=i;renderBoard()};boardEl.appendChild(b)}
 }
-for(const n of ALL){const k=document.createElement('button');k.className='key';k.textContent=n;k.onclick=()=>{if(board.givens.has(selected))return;if(mode==='note')board.toggleNote(selected,n);else board.set(selected,n);currentStep=null;renderBoard()};$('#keypad').appendChild(k)}
+for(const n of ALL){const k=document.createElement('button');k.className='key';k.textContent=n;k.onclick=()=>{if(board.givens.has(selected))return;if(mode==='note')board.toggleNote(selected,n);else board.set(selected,n);currentStep=null;coachStep=null;$('#solveCoach').classList.add('hidden');renderBoard()};$('#keypad').appendChild(k)}
 $('#valueMode').onclick=()=>{mode='value';$('#valueMode').classList.add('active');$('#noteMode').classList.remove('active')};
 $('#noteMode').onclick=()=>{mode='note';$('#noteMode').classList.add('active');$('#valueMode').classList.remove('active')};
 $('#eraseBtn').onclick=()=>{board.erase(selected);currentStep=null;renderBoard()};
@@ -21,8 +21,98 @@ $('#clearBtn').onclick=()=>{board.load('0'.repeat(81));renderBoard()};
 $('#checkBtn').onclick=()=>{const v=board.validate();alert(v.ok?'当前盘面没有直接冲突。':`发现 ${v.conflicts.length} 个冲突格、${v.dead.length} 个零候选格。`)};
 $('#exportBtn').onclick=()=>prompt('81位题目字符串',board.string());
 
-$$('[data-hint]').forEach(btn=>btn.onclick=()=>{currentStep=solver.find();const lv=+btn.dataset.hint;if(!currentStep){$('#hintBox').textContent=board.values.every(Boolean)?'题目已完成。':'当前未找到可推进步骤。';renderBoard();return}renderBoard();const s=currentStep,pos=(s.cells||[]).map(name).join('、'),del=(s.elim||[]).map(e=>`${name(e.i)} 的 ${e.n}`).join('、');$('#hintBox').innerHTML=lv===1?`<b>${s.tech}</b><br>${s.short}`:lv===2?`<b>${s.tech}</b><br>关键位置：${pos}${s.fill?'<br>可确定：'+name(s.fill.i)+'='+s.fill.n:''}${del?'<br>可删除：'+del:''}`:`<b>${s.tech}</b><br>${s.text}`});
-$('#applyHint').onclick=()=>{const s=currentStep||solver.find();if(!s)return;board.apply(s);currentStep=null;renderBoard();$('#hintBox').innerHTML=`<b>已执行：${s.tech}</b>`};
+
+const TECH_LEARNING={
+ '裸单':{idea:'一个格只剩1个候选。',scan:'卡住时先扫候选最少的格。',transfer:'以后看到某格只剩一个候选，就可以立即确定。'},
+ '隐藏单数':{idea:'某个数字在一行、列或宫中只剩一个可放位置。',scan:'不要只盯格子，要换成“这个数字还能放哪里？”',transfer:'候选很多的格也可能是隐藏单。'},
+ '锁定候选（指向）':{idea:'一个宫里的某候选全部落在同一行或列。',scan:'先按宫观察某个数字是否被压成一条直线。',transfer:'一旦锁定，同一行/列在宫外的位置就能删除。'},
+ '裸对':{idea:'两个格只包含同样两个候选，因此这两个数字被锁住。',scan:'寻找同一单位里的相同双候选。',transfer:'锁住后，同单位其他格可删除这两个数字。'},
+ '裸三数组':{idea:'三个格的候选并集刚好只有三个数字。',scan:'不必三个格完全相同，重点看候选并集。',transfer:'这三个数字只能占据这三格。'},
+ '裸四数组':{idea:'四个格的候选并集刚好只有四个数字。',scan:'从候选较少的格开始组合观察。',transfer:'四个数字被锁在四格中。'},
+ 'XY-Wing':{idea:'一个双候选枢轴连接两个双候选翼。',scan:'先找双候选枢轴，再找分别与它共享不同候选的两翼。',transfer:'两翼共享的第三候选，可从同时看见两翼的位置删除。'},
+ 'W-Wing':{idea:'两个相同双候选格，通过其中一个候选的强链连接。',scan:'先找相同双候选，再检查两个数字哪一个能通过强链接两翼。',transfer:'另一个候选必至少在一翼成立，因此共同可见位置可删除。'},
+ 'X-Wing':{idea:'同一候选在两行中都只落在相同两列（或反之）。',scan:'按单一数字扫描两行/两列的候选分布。',transfer:'矩形外同列/同行的该候选可以删除。'},
+ '矛盾链':{idea:'假设一个候选成立后会导致盘面无解。',scan:'这是较高阶兜底，不应优先于可见图形技巧。',transfer:'理解“假设→传递→矛盾→排除”的逻辑，而不是猜测。'}
+};
+let coachStep=null, coachLevel=1;
+
+function keyPositions(s){return (s?.cells||[]).map(name).join('、')||'—'}
+function eliminationText(s){return (s?.elim||[]).map(e=>`${name(e.i)} 的 ${e.n}`).join('、')}
+function directionText(s){
+  const t=TECH_LEARNING[s.tech];
+  if(t)return t.scan;
+  return s.short||'先观察候选关系，不急着看答案。'
+}
+function structureText(s){
+  if(s.tech==='W-Wing') return `先不要找删除数。请在盘面中找两个相同的双候选翼；关键区域在 ${keyPositions(s)}。`;
+  if(s.tech==='XY-Wing') return `先找一个枢轴和两个翼。关键格位于 ${keyPositions(s)}，先判断它们各自扮演什么角色。`;
+  if(s.tech==='X-Wing') return `只观察同一个候选在行/列中的位置。关键四格为 ${keyPositions(s)}。`;
+  if(s.fill) return `把注意力缩小到 ${keyPositions(s)}。先自己判断为什么这里能确定一个数字。`;
+  return `把注意力缩小到 ${keyPositions(s)}。先自己判断这些格形成了什么候选结构。`
+}
+function reasoningText(s){
+  const result=s.fill?`${name(s.fill.i)} = ${s.fill.n}`:`可以删除：${eliminationText(s)}`;
+  return `${s.text}<div class="coach-detail"><b>先自己完成最后一步：</b><br>${result}</div>`
+}
+function renderCoach(){
+  const box=$('#solveCoachBox');
+  if(!coachStep){box.innerHTML='<div class="coach-question">当前没有可用的引导步骤。</div>';return}
+  const t=TECH_LEARNING[coachStep.tech]||{};
+  let body='';
+  if(coachLevel===1) body=`<div class="coach-kicker">第1层 · 只给方向</div><div class="coach-tech">${coachStep.tech}</div><div class="coach-question">${directionText(coachStep)}</div>`;
+  if(coachLevel===2) body=`<div class="coach-kicker">第2层 · 缩小范围</div><div class="coach-tech">${coachStep.tech}</div><div class="coach-question">${structureText(coachStep)}</div>`;
+  if(coachLevel===3) body=`<div class="coach-kicker">第3层 · 推理关系</div><div class="coach-tech">${coachStep.tech}</div><div class="coach-question">${reasoningText(coachStep)}</div>`;
+  if(coachLevel===4) body=`<div class="coach-kicker">第4层 · 完整逻辑</div><div class="coach-tech">${coachStep.tech}</div><div class="coach-question">${coachStep.text}</div><div class="coach-detail"><b>结论：</b><br>${coachStep.fill?`${name(coachStep.fill.i)} = ${coachStep.fill.n}`:eliminationText(coachStep)}</div>`;
+  if(t.idea && coachLevel>=3) body+=`<div class="coach-detail"><b>这个技巧的核心：</b>${t.idea}</div>`;
+  box.innerHTML=body;
+  $$('.coach-dot').forEach((d,i)=>{d.classList.toggle('active',i===coachLevel-1);d.classList.toggle('done',i<coachLevel-1)});
+  $('#coachPrev').disabled=coachLevel===1;
+  $('#coachNext').textContent=coachLevel===4?'已到完整逻辑':'继续提示';
+  $('#coachNext').disabled=coachLevel===4;
+  $('#coachFinalActions').classList.toggle('hidden',coachLevel<4);
+  currentStep=coachStep;renderBoard()
+}
+function startCoach(){
+  coachStep=solver.find();coachLevel=1;
+  $('#solveCoach').classList.remove('hidden');$('#learningCard').classList.add('hidden');
+  if(!coachStep){
+    $('#solveCoachBox').innerHTML=board.values.every(Boolean)?'<b>题目已经完成。</b>':'<b>当前引擎没有找到可推进步骤。</b><br>如果盘面是正确的，可能需要尚未实现的更高阶技巧。';
+    $('#coachNext').disabled=true;$('#coachPrev').disabled=true;$('#coachFinalActions').classList.add('hidden');
+    currentStep=null;renderBoard();return
+  }
+  renderCoach()
+}
+function showLearningCard(step){
+  const t=TECH_LEARNING[step.tech]||{idea:step.text,scan:'回看刚才的关键格。',transfer:'下次遇到相似候选结构时先尝试识别它。'};
+  $('#learningContent').innerHTML=`<div class="learning-tech">${step.tech}</div>
+  <div class="learning-row"><span class="learning-label">刚才发生了什么</span>${step.text}</div>
+  <div class="learning-row"><span class="learning-label">识别要点</span>${t.scan}</div>
+  <div class="learning-row"><span class="learning-label">以后怎么迁移</span>${t.transfer}</div>`;
+  $('#learningCard').classList.remove('hidden')
+}
+$('#stuckBtn').onclick=startCoach;
+$('#coachPrev').onclick=()=>{if(coachLevel>1){coachLevel--;renderCoach()}};
+$('#coachNext').onclick=()=>{if(coachLevel<4){coachLevel++;renderCoach()}};
+$('#coachApply').onclick=()=>{
+  if(!coachStep)return;const done=coachStep;board.apply(done);coachStep=null;currentStep=null;renderBoard();
+  $('#solveCoach').classList.add('hidden');showLearningCard(done)
+};
+$('#coachDidIt').onclick=()=>{
+  const done=coachStep;coachStep=null;currentStep=null;$('#solveCoach').classList.add('hidden');renderBoard();
+  if(done)showLearningCard(done)
+};
+$('#nextCoachBtn').onclick=startCoach;
+
+// 提示页作为快捷入口，仍使用同一个 Solver 步骤。
+$$('[data-hint]').forEach(btn=>btn.onclick=()=>{
+  const lv=+btn.dataset.hint;currentStep=solver.find();
+  if(!currentStep){$('#hintBox').textContent=board.values.every(Boolean)?'题目已完成。':'当前未找到可推进步骤。';renderBoard();return}
+  renderBoard();const s=currentStep;
+  $('#hintBox').innerHTML=lv===1?`<b>${s.tech}</b><br>${directionText(s)}`:
+    lv===2?`<b>${s.tech}</b><br>${structureText(s)}`:
+    `<b>${s.tech}</b><br>${s.text}<br><br><b>结论：</b>${s.fill?`${name(s.fill.i)}=${s.fill.n}`:eliminationText(s)}`
+});
+$('#applyHint').onclick=()=>{const s=currentStep||solver.find();if(!s)return;board.apply(s);currentStep=null;renderBoard();$('#hintBox').innerHTML=`<b>已执行：${s.tech}</b>`;showLearningCard(s)};
 
 const scanner=new SudokuScanner($('#photoCanvas'),$('#rectifiedCanvas'));const cornerEls=$$('.corner');
 function placeCorners(){const r=$('#photoCanvas').getBoundingClientRect(),sx=r.width/$('#photoCanvas').width,sy=r.height/$('#photoCanvas').height;cornerEls.forEach((e,i)=>{e.style.left=scanner.corners[i][0]*sx+'px';e.style.top=scanner.corners[i][1]*sy+'px'})}
